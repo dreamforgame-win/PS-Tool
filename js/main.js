@@ -73,99 +73,130 @@ function checkAutoUpdate(isManual) {
 
     // 终极降级方案：完全放弃对 Github API 和 Raw 的依赖！
     // 因为这两种方式极易被运营商墙掉或者被 Github 返回 403 频率限制。
-    // 我们改为直接请求 jsDelivr CDN 上的 version.json！
-    // 并且通过在请求后面加一个随机查询参数 `?t=...` 试图击穿 CDN 缓存。
-    var cdnUrl = "https://cdn.jsdelivr.net/gh/" + githubOwner + "/" + repoName + "@" + branch + "/version.json?t=" + new Date().getTime() + Math.random();
+    // 我们改为轮询多个 CDN 源，防止某个 CDN 被墙导致无法更新
+    var cdns = [
+        "https://cdn.jsdelivr.net/gh/" + githubOwner + "/" + repoName + "@" + branch + "/version.json?t=",
+        "https://fastly.jsdelivr.net/gh/" + githubOwner + "/" + repoName + "@" + branch + "/version.json?t=",
+        "https://raw.gitmirror.com/" + githubOwner + "/" + repoName + "/" + branch + "/version.json?t=",
+        "https://raw.githubusercontent.com/" + githubOwner + "/" + repoName + "/" + branch + "/version.json?t="
+    ];
+
+    var currentCdnIndex = 0;
     var zipDownloadUrl = "https://github.com/" + githubOwner + "/" + repoName + "/archive/refs/heads/" + branch + ".zip";
 
-    if (isManual) logMsg("开始通过 jsDelivr 请求远端版本号...");
+    if (isManual) logMsg("开始请求远端版本号...");
 
-    var xhr = new XMLHttpRequest();
-    xhr.overrideMimeType("application/json");
-    // 不携带凭证，防止复杂网络环境下的跨域被拒
-    xhr.withCredentials = false;
-    xhr.open("GET", cdnUrl, true);
-
-    xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4) {
-            if (xhr.status === 200) {
-                try {
-                    // 解析 version.json
-                    var responseText = xhr.responseText.trim();
-                    var remoteData;
-                    if (responseText.startsWith("{")) {
-                        remoteData = JSON.parse(responseText);
-                    } else {
-                        remoteData = eval("(" + responseText + ")");
-                    }
-
-                    var remoteVer = remoteData.version ? remoteData.version.replace("v", "") : null;
-                    if(!remoteVer) throw new Error("无法获取 version 字段");
-
-                    var botEl = document.getElementById("verDisplay");
-                    var localVersion = botEl ? botEl.innerText.replace("v", "") : "1.0.0";
-                    if (localVersion === "-") localVersion = "1.0.0";
-
-                    if (isManual) logMsg("云端版本: " + remoteVer + " | 本地版本: " + localVersion);
-
-                    var btnForce = document.getElementById("btnForceCheckUpdate");
-
-                    // 比较版本号：只有当远端版本大于本地版本时才判定为新版本
-                    var isNewer = false;
-                    if (remoteVer && localVersion) {
-                        var v1 = remoteVer.split('.');
-                        var v2 = localVersion.split('.');
-                        var len = Math.max(v1.length, v2.length);
-                        for (var i = 0; i < len; i++) {
-                            var num1 = parseInt(v1[i]) || 0;
-                            var num2 = parseInt(v2[i]) || 0;
-                            if (num1 > num2) { isNewer = true; break; }
-                            if (num1 < num2) { isNewer = false; break; }
-                        }
-                    }
-
-                    if (isNewer) {
-                        if (btnForce) {
-                            btnForce.innerText = "🎉 发现新版本 v" + remoteVer + "！点击顶部横幅更新";
-                            btnForce.style.background = "#4CAF50";
-                            btnForce.style.color = "#fff";
-                        }
-                        showUpdateBanner(remoteVer, zipDownloadUrl, repoName, branch);
-                        setStatus("发现新版本 v" + remoteVer + "，请点击顶部横幅更新", "");
-                    } else {
-                        if (isManual) {
-                            setStatus("当前已经是最新版本 (" + localVersion + ")，无需更新。", "");
-                            logMsg("已经是最新版本，无需更新。");
-                        }
-                        if (btnForce) {
-                            btnForce.disabled = false;
-                            btnForce.innerText = "🔄 检查更新 (当前已是最新版)";
-                            btnForce.style.background = "#444";
-                            btnForce.style.color = "#aaa";
-                        }
-                    }
-                } catch(e) {
-                    if (isManual) logMsg("解析远端版本 JSON 失败: " + e.message);
-                    resetBtnForce();
-                }
-            } else {
-                if (isManual) logMsg("热更检测失败，状态码: " + xhr.status);
-                resetBtnForce();
-            }
+    function tryNextCdn() {
+        if (currentCdnIndex >= cdns.length) {
+            if (isManual) logMsg("所有更新源均无法访问，检测失败。");
+            resetBtnForce();
+            return;
         }
-    };
 
-    xhr.onerror = function() {
-        if (isManual) logMsg("热更请求遭遇网络异常 (可能需要开启代理)");
-        resetBtnForce();
-    };
+        var cdnUrl = cdns[currentCdnIndex] + new Date().getTime() + Math.random();
+        if (isManual) logMsg("正在尝试源 " + (currentCdnIndex + 1) + ": " + cdns[currentCdnIndex].split('/')[2]);
 
-    try {
-        xhr.send(null);
-    } catch(e) {
-        if (isManual) logMsg("发送请求失败: " + e.message);
-        resetBtnForce();
+        var xhr = new XMLHttpRequest();
+        xhr.overrideMimeType("application/json");
+        // 不携带凭证，防止复杂网络环境下的跨域被拒
+        xhr.withCredentials = false;
+        xhr.timeout = 5000; // 5秒超时
+        xhr.open("GET", cdnUrl, true);
+
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                if (xhr.status === 200) {
+                    try {
+                        // 解析 version.json
+                        var responseText = xhr.responseText.trim();
+                        var remoteData;
+                        if (responseText.startsWith("{")) {
+                            remoteData = JSON.parse(responseText);
+                        } else {
+                            remoteData = eval("(" + responseText + ")");
+                        }
+
+                        var remoteVer = remoteData.version ? remoteData.version.replace("v", "") : null;
+                        if(!remoteVer) throw new Error("无法获取 version 字段");
+
+                        var botEl = document.getElementById("verDisplay");
+                        var localVersion = botEl ? botEl.innerText.replace("v", "") : "1.0.0";
+                        if (localVersion === "-") localVersion = "1.0.0";
+
+                        if (isManual) logMsg("云端版本: " + remoteVer + " | 本地版本: " + localVersion);
+
+                        var btnForce = document.getElementById("btnForceCheckUpdate");
+
+                        // 比较版本号：只有当远端版本大于本地版本时才判定为新版本
+                        var isNewer = false;
+                        if (remoteVer && localVersion) {
+                            var v1 = remoteVer.split('.');
+                            var v2 = localVersion.split('.');
+                            var len = Math.max(v1.length, v2.length);
+                            for (var i = 0; i < len; i++) {
+                                var num1 = parseInt(v1[i]) || 0;
+                                var num2 = parseInt(v2[i]) || 0;
+                                if (num1 > num2) { isNewer = true; break; }
+                                if (num1 < num2) { isNewer = false; break; }
+                            }
+                        }
+
+                        if (isNewer) {
+                            if (btnForce) {
+                                btnForce.innerText = "🎉 发现新版本 v" + remoteVer + "！点击顶部横幅更新";
+                                btnForce.style.background = "#4CAF50";
+                                btnForce.style.color = "#fff";
+                            }
+                            showUpdateBanner(remoteVer, zipDownloadUrl, repoName, branch);
+                            setStatus("发现新版本 v" + remoteVer + "，请点击顶部横幅更新", "");
+                        } else {
+                            if (isManual) {
+                                setStatus("当前已经是最新版本 (" + localVersion + ")，无需更新。", "");
+                                logMsg("已经是最新版本，无需更新。");
+                            }
+                            if (btnForce) {
+                                btnForce.disabled = false;
+                                btnForce.innerText = "🔄 检查更新 (当前已是最新版)";
+                                btnForce.style.background = "#444";
+                                btnForce.style.color = "#aaa";
+                            }
+                        }
+                    } catch(e) {
+                        if (isManual) logMsg("解析远端版本 JSON 失败: " + e.message);
+                        currentCdnIndex++;
+                        tryNextCdn();
+                    }
+                } else {
+                    if (isManual) logMsg("状态码异常: " + xhr.status);
+                    currentCdnIndex++;
+                    tryNextCdn();
+                }
+            }
+        };
+
+        xhr.onerror = function() {
+            if (isManual) logMsg("请求出错(网络异常)");
+            currentCdnIndex++;
+            tryNextCdn();
+        };
+
+        xhr.ontimeout = function() {
+            if (isManual) logMsg("请求超时");
+            currentCdnIndex++;
+            tryNextCdn();
+        };
+
+        try {
+            xhr.send(null);
+        } catch(e) {
+            if (isManual) logMsg("发送请求失败: " + e.message);
+            currentCdnIndex++;
+            tryNextCdn();
+        }
     }
+
+    // 开始请求
+    tryNextCdn();
 
     function resetBtnForce() {
         var btnForce = document.getElementById("btnForceCheckUpdate");
