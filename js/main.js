@@ -71,27 +71,36 @@ function checkAutoUpdate(isManual) {
     var repoName = "PS-Tool";
     var branch = "main";
 
-    // Github API 获取 releases 的 latest 信息
-    var apiUrl = "https://api.github.com/repos/" + githubOwner + "/" + repoName + "/releases/latest?t=" + new Date().getTime();
+    // 终极降级方案：完全放弃对 Github API 和 Raw 的依赖！
+    // 因为这两种方式极易被运营商墙掉或者被 Github 返回 403 频率限制。
+    // 我们改为直接请求 jsDelivr CDN 上的 version.json！
+    // 并且通过在请求后面加一个随机查询参数 `?t=...` 试图击穿 CDN 缓存。
+    var cdnUrl = "https://cdn.jsdelivr.net/gh/" + githubOwner + "/" + repoName + "@" + branch + "/version.json?t=" + new Date().getTime() + Math.random();
     var zipDownloadUrl = "https://github.com/" + githubOwner + "/" + repoName + "/archive/refs/heads/" + branch + ".zip";
 
-    if (isManual) logMsg("开始请求远端 Release 版本号...");
+    if (isManual) logMsg("开始通过 jsDelivr 请求远端版本号...");
 
     var xhr = new XMLHttpRequest();
     xhr.overrideMimeType("application/json");
     // 不携带凭证，防止复杂网络环境下的跨域被拒
     xhr.withCredentials = false;
-    xhr.open("GET", apiUrl, true);
+    xhr.open("GET", cdnUrl, true);
 
     xhr.onreadystatechange = function() {
         if (xhr.readyState === 4) {
             if (xhr.status === 200) {
                 try {
-                    // API 返回的是 release 对象，提取 tag_name (例如 "v1.0.8" 或 "1.0.8")
-                    var remoteData = JSON.parse(xhr.responseText);
-                    var remoteVer = remoteData.tag_name ? remoteData.tag_name.replace("v", "") : null;
+                    // 解析 version.json
+                    var responseText = xhr.responseText.trim();
+                    var remoteData;
+                    if (responseText.startsWith("{")) {
+                        remoteData = JSON.parse(responseText);
+                    } else {
+                        remoteData = eval("(" + responseText + ")");
+                    }
 
-                    if(!remoteVer) throw new Error("无法获取 tag_name");
+                    var remoteVer = remoteData.version ? remoteData.version.replace("v", "") : null;
+                    if(!remoteVer) throw new Error("无法获取 version 字段");
 
                     var botEl = document.getElementById("verDisplay");
                     var localVersion = botEl ? botEl.innerText.replace("v", "") : "1.0.0";
@@ -100,7 +109,22 @@ function checkAutoUpdate(isManual) {
                     if (isManual) logMsg("云端版本: " + remoteVer + " | 本地版本: " + localVersion);
 
                     var btnForce = document.getElementById("btnForceCheckUpdate");
-                    if (remoteVer && remoteVer !== localVersion) {
+
+                    // 比较版本号：只有当远端版本大于本地版本时才判定为新版本
+                    var isNewer = false;
+                    if (remoteVer && localVersion) {
+                        var v1 = remoteVer.split('.');
+                        var v2 = localVersion.split('.');
+                        var len = Math.max(v1.length, v2.length);
+                        for (var i = 0; i < len; i++) {
+                            var num1 = parseInt(v1[i]) || 0;
+                            var num2 = parseInt(v2[i]) || 0;
+                            if (num1 > num2) { isNewer = true; break; }
+                            if (num1 < num2) { isNewer = false; break; }
+                        }
+                    }
+
+                    if (isNewer) {
                         if (btnForce) {
                             btnForce.innerText = "🎉 发现新版本 v" + remoteVer + "！点击顶部横幅更新";
                             btnForce.style.background = "#4CAF50";
@@ -257,7 +281,7 @@ function showUpdateBanner(newVersion, zipUrl, repoName, branch) {
                                         "$src = Join-Path '" + tmpDir + "' '" + repoName + "-" + branch + "\\*'; " +
                                         "$dest = '" + localExtPath + "\\'; " +
                                         "$argList = '/c \"xcopy \"\"' + $src + '\"\" \"\"' + $dest + '\"\" /s /e /y /c /h & echo SUCCESS > \"\"' + statusFile + '\"\"\"'; " +
-                                        "Start-Process cmd.exe -ArgumentList $argList -Verb RunAs -WindowStyle Hidden;";
+                                        "Start-Process cmd.exe -ArgumentList $argList -WindowStyle Hidden;";
                         window.cep.process.createProcess("powershell.exe", "-NoProfile", "-Command", psExtract);
 
                         // 开始同样的轮询
