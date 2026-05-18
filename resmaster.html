@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Res-Master</title>
+    <link rel="stylesheet" href="css/resmaster.css">
+    <style>
+        :root { --icon-size: 60px; --grid-gap: 10px; }
+        body { background: #323232; color: #ccc; font-family: "Segoe UI", sans-serif; margin: 0; padding: 0; user-select: none; overflow: hidden; }
+        
+        /* 侧边栏树结构 */
+        .tree-item { cursor: pointer; padding: 6px 8px; border-radius: 3px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #bbb; }
+        .tree-item:hover { background: #444; color: #4fc3f7; }
+        .tree-item.active { background: #4fc3f7; color: #000 !important; }
+        .tree-child { padding-left: 14px; display: none; }
+        .tree-child.open { display: block; }
+        
+        /* 文件卡片布局 */
+        .res-file-card { 
+            display: flex; flex-direction: column; align-items: center; 
+            padding: 8px; border-radius: 4px; cursor: pointer; 
+            transition: background 0.1s; border: 1px solid transparent;
+            width: var(--icon-size);
+        }
+        .res-file-card:hover { background: #444; border-color: #555; }
+        .res-file-img-box { 
+            width: calc(var(--icon-size) - 10px); 
+            height: calc(var(--icon-size) - 10px); 
+            display: flex; justify-content: center; align-items: center;
+            overflow: hidden; background: #1a1a1a; border-radius: 2px;
+        }
+        .res-file-img { max-width: 100%; max-height: 100%; object-fit: contain; pointer-events: none; }
+        .res-file-name { 
+            font-size: 10px; color: #aaa; text-align: center; width: 100%; 
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px; 
+        }
+
+        /* 列表模式适配 */
+        .list-mode .res-file-card { flex-direction: row; width: 100%; padding: 4px 8px; }
+        .list-mode .res-file-img-box { width: 20px; height: 20px; margin-right: 8px; }
+        .list-mode .res-file-name { text-align: left; }
+
+        #res-breadcrumb { font-size: 11px; color: #888; background:#252525; padding:6px 10px; border-bottom: 1px solid #111; }
+        
+        /* 底部工具栏 */
+        .footer { 
+            height: 28px; background: #252525; border-top: 1px solid #111; 
+            display: flex; align-items: center; padding: 0 10px; 
+        }
+        #zoomSlider { width: 60px; height: 4px; cursor: pointer; accent-color: #4fc3f7; }
+        
+        #searchInput {
+            flex: 1; background: #1a1a1a; border: 1px solid #444; border-radius: 3px; 
+            color: #ccc; font-size: 10px; padding: 3px 8px; outline: none; margin-right: 10px;
+        }
+        #searchInput:focus { border-color: #4fc3f7; }
+    </style>
+</head>
+<body>
+    <div style="display: flex; height: 100vh; flex-direction: column;">
+        <div id="res-breadcrumb">Select Root...</div>
+        
+        <div style="display: flex; flex: 1; overflow: hidden;">
+            <!-- Sidebar -->
+            <div id="res-sidebar" style="width: 150px; background: #2b2b2b; border-right: 1px solid #111; overflow-y: auto; padding: 10px 5px;">
+                <div style="font-size: 10px; color: #666; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; padding: 0 5px;">
+                    <span>RESOURCES</span>
+                    <span id="btnSetRoot" style="cursor:pointer; color:#4fc3f7; font-weight:bold;">SET</span>
+                </div>
+                <div id="res-tree"></div>
+            </div>
+            
+            <!-- Content -->
+            <div id="res-main" style="flex: 1; background: #1e1e1e; overflow-y: auto; padding: 10px;">
+                <div id="res-content" style="display: flex; flex-wrap: wrap; gap: var(--grid-gap);">
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <input type="text" id="searchInput" placeholder="Search (Enter for global)...">
+            <span style="font-size: 10px; color: #666; margin-right: 8px;">ZOOM</span>
+            <input type="range" id="zoomSlider" min="30" max="150" value="70">
+        </div>
+    </div>
+
+    <script src="js/CSInterface.js"></script>
+    <script>
+        var csInterface = new CSInterface();
+        var resRoot = localStorage.getItem("ResMaster_Root") || "";
+        var resTree = document.getElementById("res-tree");
+        var resContent = document.getElementById("res-content");
+        var resBreadcrumb = document.getElementById("res-breadcrumb");
+        var zoomSlider = document.getElementById("zoomSlider");
+        var searchInput = document.getElementById("searchInput");
+
+        var currentFiles = []; // 存储当前目录下的所有文件对象，用于过滤
+
+        // 缩放逻辑
+        zoomSlider.oninput = function() {
+            var val = this.value;
+            document.documentElement.style.setProperty('--icon-size', val + 'px');
+            if (val < 50) {
+                resContent.classList.add("list-mode");
+            } else {
+                resContent.classList.remove("list-mode");
+            }
+        };
+
+        function init() {
+            if (resRoot) {
+                loadFolder(resRoot, resTree);
+                navigateTo(resRoot);
+            }
+            zoomSlider.oninput();
+        }
+
+        document.getElementById("btnSetRoot").onclick = function() {
+            csInterface.evalScript("selectOutputFolderDialog()", function(result) {
+                if (result !== "CANCELLED" && result.indexOf("ERROR") === -1) {
+                    resRoot = result;
+                    localStorage.setItem("ResMaster_Root", resRoot);
+                    loadFolder(resRoot, resTree);
+                    navigateTo(resRoot);
+                }
+            });
+        };
+
+        // 搜索逻辑
+        searchInput.oninput = function() {
+            var kw = this.value.toLowerCase();
+            var cards = document.querySelectorAll(".res-file-card");
+            cards.forEach(function(card) {
+                var name = card.querySelector(".res-file-name").innerText.toLowerCase();
+                card.style.display = name.indexOf(kw) !== -1 ? "flex" : "none";
+            });
+        };
+
+        searchInput.onkeydown = function(e) {
+            if (e.keyCode === 13) { // Enter
+                var kw = this.value.trim();
+                if (!kw) { navigateTo(resRoot); return; }
+                
+                resBreadcrumb.innerText = "Global Search: " + kw;
+                resContent.innerHTML = "<div style='padding:10px;color:#666'>Searching Project...</div>";
+                
+                csInterface.evalScript("searchFiles('" + resRoot.replace(/\\/g, "/") + "', '" + kw + "')", function(result) {
+                    try {
+                        var data = JSON.parse(result);
+                        renderFileList(data.files);
+                    } catch(e) {
+                        resContent.innerHTML = "<div style='padding:10px;color:red'>Search Error</div>";
+                    }
+                });
+            }
+        };
+
+        function loadFolder(dirPath, container) {
+            container.innerHTML = "<div style='padding:10px;color:#444'>...</div>";
+            csInterface.evalScript("getFolderContent('" + dirPath.replace(/\\/g, "/") + "')", function(result) {
+                container.innerHTML = "";
+                try {
+                    var data = JSON.parse(result);
+                    data.folders.forEach(function(f) {
+                        var item = document.createElement("div");
+                        item.className = "tree-item";
+                        item.innerHTML = "📁 " + f.name;
+                        item.onclick = function(e) {
+                            e.stopPropagation();
+                            var child = this.nextElementSibling;
+                            if (child && child.classList.contains("tree-child")) {
+                                child.classList.toggle("open");
+                            } else {
+                                var childContainer = document.createElement("div");
+                                childContainer.className = "tree-child open";
+                                this.parentNode.insertBefore(childContainer, this.nextSibling);
+                                loadFolder(f.fullPath, childContainer);
+                            }
+                            navigateTo(f.fullPath);
+                            document.querySelectorAll(".tree-item").forEach(function(el){ el.classList.remove("active"); });
+                            this.classList.add("active");
+                        };
+                        container.appendChild(item);
+                    });
+                } catch(e) {}
+            });
+        }
+
+        // 原生级懒加载：直接利用浏览器的 file:/// 协议异步解码图片
+        var observer = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                if (entry.isIntersecting) {
+                    var card = entry.target;
+                    var path = card.getAttribute("data-path");
+                    var ext = card.getAttribute("data-ext");
+                    var loaded = card.getAttribute("data-loaded");
+                    
+                    if (loaded !== "true" && ["png", "jpg", "jpeg"].indexOf(ext) !== -1) {
+                        setTimeout(function() {
+                            if (!entry.isIntersecting) return;
+                            var imgBox = card.querySelector(".res-file-img-box");
+                            imgBox.innerHTML = '<img class="res-file-img" src="file:///' + path + '">';
+                            card.setAttribute("data-loaded", "true");
+                        }, 50);
+                    }
+                }
+            });
+        }, { root: document.getElementById("res-main"), threshold: 0.1 });
+
+        // 完美拖拽劫持系统：利用事件互斥逻辑判定外部 Drop
+        var isDroppedInPanel = false;
+        
+        document.addEventListener("dragover", function(e) {
+            e.preventDefault(); // 必须阻止默认行为，才能允许在面板内触发 drop 事件
+        });
+        
+        document.addEventListener("drop", function(e) {
+            isDroppedInPanel = true; // 只要是在面板范围内松手，就标记为 true
+        });
+
+        function navigateTo(dirPath) {
+            resBreadcrumb.innerText = dirPath;
+            resContent.innerHTML = "<div style='padding:10px;color:#666'>Scanning...</div>";
+            
+            csInterface.evalScript("getFolderContent('" + dirPath.replace(/\\/g, "/") + "')", function(result) {
+                try {
+                    var data = JSON.parse(result);
+                    currentFiles = data.files;
+                    renderFileList(data.files);
+                } catch(e) {
+                    resContent.innerHTML = "<div style='padding:10px;color:red'>Parse Error</div>";
+                }
+            });
+        }
+
+        function renderFileList(files) {
+            resContent.innerHTML = "";
+            var index = 0;
+
+            function renderBatch() {
+                var limit = Math.min(index + 20, files.length);
+                for (; index < limit; index++) {
+                    var f = files[index];
+                    var card = document.createElement("div");
+                    card.className = "res-file-card";
+                    card.draggable = true;
+                    card.setAttribute("data-path", f.fullPath.replace(/\\/g, "/"));
+                    card.setAttribute("data-ext", f.ext);
+                    
+                    var defaultIcon = "📄";
+                    if (f.ext === "psd" || f.ext === "psb") defaultIcon = "🎨";
+                    else if (["png", "jpg", "jpeg"].indexOf(f.ext) !== -1) defaultIcon = "🖼️";
+
+                    card.innerHTML = '<div class="res-file-img-box"><div class="res-file-img-placeholder" style="font-size:24px">' + defaultIcon + '</div></div>' +
+                                     '<div class="res-file-name" title="'+f.name+'">' + f.name + '</div>';
+                    
+                    card.ondblclick = (function(path){
+                        return function() { csInterface.evalScript("placeFile('" + path + "')"); };
+                    })(f.fullPath.replace(/\\/g, "/"));
+
+                    card.ondragstart = (function(fObj){
+                        return function(e) {
+                            isDroppedInPanel = false;
+                            e.dataTransfer.effectAllowed = "copy";
+                            var webPath = fObj.fullPath.replace(/\\/g, "/");
+                            var dummyMime = "application/octet-stream";
+                            if (fObj.ext === "png") dummyMime = "image/png";
+                            else if (fObj.ext === "jpg" || fObj.ext === "jpeg") dummyMime = "image/jpeg";
+                            e.dataTransfer.setData("DownloadURL", dummyMime + ":" + fObj.name + ":file:///" + webPath);
+                        };
+                    })(f);
+
+                    card.ondragend = (function(path){
+                        return function(e) {
+                            if (!isDroppedInPanel) {
+                                resBreadcrumb.innerText = "Placing file (Wait 0.8s)...";
+                                setTimeout(function() {
+                                    csInterface.evalScript("placeFile('" + path + "')", function(res) {
+                                        resBreadcrumb.innerText = "Done: " + (res || "No response");
+                                        // 3秒后恢复路径显示，但不刷新列表
+                                        setTimeout(function() { resBreadcrumb.innerText = path; }, 3000);
+                                    });
+                                }, 800);
+                            }
+                        };
+                    })(f.fullPath.replace(/\\/g, "/"));
+
+                    resContent.appendChild(card);
+                    if (["png", "jpg", "jpeg"].indexOf(f.ext) !== -1) {
+                        observer.observe(card);
+                    }
+                }
+                if (index < files.length) {
+                    requestAnimationFrame(renderBatch);
+                }
+            }
+            renderBatch();
+        }
+
+
+
+        init();
+    </script>
+</body>
+</html>

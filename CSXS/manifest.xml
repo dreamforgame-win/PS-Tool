@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExtensionManifest Version="9.0" ExtensionBundleId="com.uilink.cep" ExtensionBundleVersion="1.0.0"
+    ExtensionBundleName="UI-Link CEP Exporter" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <ExtensionList>
+        <Extension Id="com.uilink.cep.panel" Version="1.0" />
+        <Extension Id="com.uilink.resmaster.panel" Version="1.0" />
+    </ExtensionList>
+    <ExecutionEnvironment>
+        <HostList>
+            <!-- Photoshop CC 2019 is Version 20.0 -->
+            <Host Name="PHXS" Version="20.0" />
+            <Host Name="PHSP" Version="20.0" />
+        </HostList>
+        <LocaleList>
+            <Locale Code="All" />
+        </LocaleList>
+        <RequiredRuntimeList>
+            <RequiredRuntime Name="CSXS" Version="9.0" />
+        </RequiredRuntimeList>
+    </ExecutionEnvironment>
+    <DispatchInfoList>
+        <Extension Id="com.uilink.cep.panel">
+            <DispatchInfo>
+                <Resources>
+                    <MainPath>./index.html</MainPath>
+                    <ScriptPath>./jsx/hostscript.jsx</ScriptPath>
+                </Resources>
+                <CEFCommandLine>
+                    <Parameter>--enable-nodejs</Parameter>
+                    <Parameter>--mixed-context</Parameter>
+                </CEFCommandLine>
+                <Lifecycle>
+                    <AutoVisible>true</AutoVisible>
+                </Lifecycle>
+                <UI>
+                    <Type>Panel</Type>
+                    <Menu>UI-Link Exporter</Menu>
+                    <Geometry>
+                        <Size>
+                            <Height>450</Height>
+                            <Width>280</Width>
+                        </Size>
+                        <MaxSize>
+                            <Height>800</Height>
+                            <Width>600</Width>
+                        </MaxSize>
+                        <MinSize>
+                            <Height>300</Height>
+                            <Width>250</Width>
+                        </MinSize>
+                    </Geometry>
+                </UI>
+            </DispatchInfo>
+        </Extension>
+        <Extension Id="com.uilink.resmaster.panel">
+            <DispatchInfo>
+                <Resources>
+                    <MainPath>./resmaster.html</MainPath>
+                    <ScriptPath>./jsx/hostscript.jsx</ScriptPath>
+                </Resources>
+                <Lifecycle>
+                    <AutoVisible>true</AutoVisible>
+                </Lifecycle>
+                <UI>
+                    <Type>Panel</Type>
+                    <Menu>Res-Master 资源管理</Menu>
+                    <Geometry>
+                        <Size>
+                            <Height>600</Height>
+                            <Width>400</Width>
+                        </Size>
+                        <MinSize>
+                            <Height>400</Height>
+                            <Width>300</Width>
+                        </MinSize>
+                    </Geometry>
+                </UI>
+            </DispatchInfo>
+        </Extension>
+    </DispatchInfoList>
+</ExtensionManifest>

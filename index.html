@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>UI-Link 工具箱</title>
+    <style>
+        body {
+            background-color: #323232;
+            color: #ccc;
+            font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+            font-size: 12px;
+            padding: 0;
+            margin: 0;
+            user-select: none;
+            overflow-x: hidden;
+        }
+
+        /* 标签栏样式 */
+        .tabs {
+            display: flex;
+            background: #252525;
+            border-bottom: 1px solid #111;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 10px 0;
+            text-align: center;
+            cursor: pointer;
+            color: #888;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover { color: #ccc; background: #2a2a2a; }
+        .tab-btn.active {
+            color: #4fc3f7;
+            background: #323232;
+            border-bottom: 2px solid #4fc3f7;
+        }
+
+        /* 内容区 */
+        .tab-content { display: none; padding: 12px; }
+        .tab-content.active { display: block; }
+
+        .title { font-weight: bold; margin-bottom: 12px; color: #fff; font-size: 13px; border-bottom: 1px solid #555; padding-bottom: 4px; }
+        .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+
+        /* 命名工具 */
+        .name-group { display: flex; gap: 4px; margin-bottom: 10px; align-items: center; }
+        .name-input { flex: 1; background: #222; border: 1px solid #555; color: #fff; padding: 6px; border-radius: 3px; }
+        .size-input { width: 45px; background: #222; border: 1px solid #555; color: #fff; padding: 6px; border-radius: 3px; text-align: center; }
+
+        button { background: #555; color: white; border: 1px solid #333; padding: 6px 10px; border-radius: 3px; cursor: pointer; font-size: 12px; transition: background 0.1s; }
+        button:hover { background: #666; }
+        button:active { background: #444; }
+        button:disabled { background: #444; color: #777; cursor: not-allowed; }
+        .btn-primary { background: #1473E6; border: 1px solid #0D66D0; font-weight: bold; }
+        .btn-primary:hover { background: #0D66D0; }
+
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+
+        /* 九宫格编辑器 */
+        .canvas-wrapper {
+            width: 100%;
+            height: 180px;
+            background: #111 url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAOklEQVQYV2NkYGAwYcCHGQkwqGA0Togww1lYWBgY/v//z4QwwxiMJoRwgTzD1M+D12NEx+ToZ8wYAgAw7yI0E3G1kwAAAABJRU5ErkJggg==') repeat;
+            border: 1px solid #555;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 6px;
+            overflow: hidden;
+            cursor: grab;
+        }
+        .canvas-wrapper:active { cursor: grabbing; }
+
+        .zoom-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 11px; }
+        .zoom-bar input[type="range"] { -webkit-appearance: none; height: 4px; background: #444; border-radius: 2px; outline: none; }
+        .zoom-bar input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: #4fc3f7; border-radius: 50%; cursor: pointer; }
+
+        #canvasBox {
+            position: relative;
+            line-height: 0;
+            transform-origin: center center;
+        }
+        /* 蓝色标准边界：代表图层设计的物理起点 */
+        #standardBounds {
+            position: absolute;
+            border: 1px solid #1473e6;
+            pointer-events: none;
+            box-sizing: border-box;
+            z-index: 5;
+            display: none; /* 默认隐藏，有数据时显示 */
+        }
+        #previewImage {
+            max-width: 250px;
+            max-height: 178px;
+            display: block;
+            pointer-events: none;
+        }
+
+        /* 参考线 */
+        .guide { position: absolute; background: #00e676; z-index: 10; transition: background 0.1s; }
+        .guide.vertical { width: 1px; height: 100%; cursor: col-resize; top: 0; }
+        .guide.horizontal { height: 1px; width: 100%; cursor: row-resize; left: 0; }
+        
+        /* 核心优化：增加透明交互热区 */
+        .guide:after {
+            content: "";
+            position: absolute;
+            z-index: 100;
+        }
+        .guide.vertical:after { left: -8px; right: -8px; top: 0; bottom: 0; }
+        .guide.horizontal:after { top: -8px; bottom: -8px; left: 0; right: 0; }
+
+        .guide:hover, .guide.dragging { background: #ffea00; z-index: 11; box-shadow: 0 0 8px rgba(0,0,0,0.5); }
+        .guide.vertical:hover, .guide.vertical.dragging { width: 2px; margin-left: -1px; }
+        .guide.horizontal:hover, .guide.horizontal.dragging { height: 2px; margin-top: -1px; }
+
+        /* 输入矩阵 */
+        .slice-control-bar { display: flex; justify-content: space-between; margin-bottom: 6px; }
+        .slice-control-bar button { padding: 4px 8px; font-size: 11px; background: #444; }
+
+        .slice-inputs { display: grid; grid-template-columns: 80px 80px 80px; grid-template-rows: auto auto auto; gap: 4px; justify-content: center; align-items: center; }
+        .input-group { display: flex; flex-direction: column; align-items: center; }
+        .input-group span { font-size: 10px; color: #888; margin-bottom: 2px; }
+        .slice-inputs input { width: 60px; text-align: center; background: #222; border: 1px solid #555; color: #fff; padding: 4px; border-radius: 3px; }
+
+        /* 隐藏 input type=number 的上下箭头 */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield; /* Firefox */
+        }
+
+        /* Diff 列表 */
+        .diff-container { background: #2a2a2a; border: 1px solid #555; border-radius: 3px; max-height: 200px; overflow-y: auto; margin-bottom: 8px; padding: 4px; }
+        .diff-item { display: flex; align-items: center; padding: 6px 4px; border-bottom: 1px solid #333; gap: 6px; }
+        .diff-item:last-child { border-bottom: none; }
+        .diff-item input[type="checkbox"] { margin: 0; cursor: pointer; }
+        .diff-item .layer-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+
+        .badge { padding: 2px 4px; border-radius: 2px; font-size: 10px; font-weight: bold; }
+        .badge.new { background: #1b5e20; color: #a5d6a7; }
+        .badge.mod { background: #e65100; color: #ffcc80; }
+        .badge.same { background: #424242; color: #9e9e9e; }
+        .badge.disabled { background: #0d47a1; color: #bbdefb; }
+
+        #status { padding: 8px; text-align: center; font-size: 11px; color: #4CAF50; background: #252525; border-top: 1px solid #111; word-break: break-all; min-height: 16px; }
+        .error { color: #F44336 !important; }
+        .warning { color: #FF9800 !important; }
+
+        /* 胶囊开关样式 */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 34px;
+            height: 18px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider-round {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #444;
+            transition: .2s;
+            border-radius: 18px;
+        }
+        .slider-round:before {
+            position: absolute;
+            content: "";
+            height: 12px;
+            width: 12px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .2s;
+            border-radius: 50%;
+        }
+        input:checked + .slider-round { background-color: #4fc3f7; }
+        input:checked + .slider-round:before { transform: translateX(16px); }
+
+        .preview-box {
+            background: #1a1a1a;
+            border: 1px dashed #444;
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .preview-item { font-size: 10px; color: #888; margin-bottom: 4px; }
+        .preview-value { font-size: 11px; color: #4fc3f7; font-family: monospace; }
+        
+        #previewImage {
+            max-width: none !important;
+            max-height: none !important;
+            image-rendering: -webkit-optimize-contrast; /* 提高预览清晰度 */
+        }
+    </style>
+    <script src="js/CSInterface.js"></script>
+</head>
+<body>
+    <!-- 新增：热更提示横幅 -->
+    <div id="updateBanner" style="display: none; background: #FF9800; color: #000; font-weight: bold; text-align: center; padding: 6px; cursor: pointer; border-bottom: 1px solid #E65100;">
+        🚀 发现新版本 <span id="newVersionText"></span>！点击立即更新
+    </div>
+
+    <!-- 顶部页签栏 -->
+    <div class="tabs">
+        <div class="tab-btn active" data-target="tab-naming">属性命名</div>
+        <div class="tab-btn" data-target="tab-slice">九宫格</div>
+        <div class="tab-btn" data-target="tab-export">扫描导出</div>
+        <div class="tab-btn" data-target="tab-tools">Tools-Box</div>
+    </div>
+
+
+    <!-- 1. 属性命名 Tab (模块化重构版) -->
+    <div id="tab-naming" class="tab-content active">
+        <!-- 1. 模块命名 (Root) -->
+        <div class="name-group">
+            <span style="color:#aaa; width:65px;">模块命名:</span>
+            <input type="text" id="moduleRootName" class="name-input" placeholder="默认文件名">
+            <span id="btnSaveModule" style="font-size: 10px; color: #4fc3f7; cursor: pointer; margin-left: 4px; border: 1px solid #4fc3f7; padding: 0 2px; border-radius: 2px;" title="锁定当前模块名">记忆</span>
+        </div>
+
+        <div class="title" style="margin-top:15px;">组件命名规则</div>
+        
+        <!-- 2. 基础名称 -->
+        <div class="name-group">
+            <span style="color:#aaa; width:65px;">基础名称:</span>
+            <input type="text" id="moduleBaseName" class="name-input" placeholder="请输入图层核心名">
+        </div>
+
+        <!-- 3. 条件选择 -->
+        <div class="name-group">
+            <span style="color:#aaa; width:65px;">输出类型:</span>
+            <select id="moduleOutputType" class="name-input" style="appearance: auto; cursor: pointer;">
+                <option value="atlas">图集 Atlas</option>
+                <option value="texture">大图 Texture</option>
+            </select>
+        </div>
+
+        <!-- 3.1 图集前缀 (新增，仅图集时显示) -->
+        <div class="name-group" id="groupAtlasPrefix" style="position: relative;">
+            <span style="color:#aaa; width:65px;">图集前缀:</span>
+            <select id="moduleAtlasPrefix" class="name-input" style="appearance: auto; cursor: pointer;">
+                <option value="common">common</option>
+            </select>
+            <span id="btnManagePrefix" style="font-size: 10px; color: #4fc3f7; cursor: pointer; margin-left: 4px; border: 1px solid #4fc3f7; padding: 1px 6px; border-radius: 2px;" title="管理图集前缀">+</span>
+            
+            <!-- 预设下拉菜单 (绝对定位) -->
+            <div id="prefixMenu" style="display:none; position:absolute; top:28px; right:0; width:120px; background:#252525; border:1px solid #444; border-radius:4px; z-index:100; box-shadow:0 4px 10px rgba(0,0,0,0.5); padding:6px;">
+                <div style="font-size:10px; color:#888; margin-bottom:4px; border-bottom:1px solid #333; padding-bottom:4px;">图集前缀管理</div>
+                <div id="prefixList" style="max-height:100px; overflow-y:auto;"></div>
+                <div id="btnAddPrefix" style="margin-top:6px; font-size:10px; color:#00e676; cursor:pointer; text-align:center; border-top:1px solid #333; padding-top:4px;">+ 添加新前缀</div>
+            </div>
+        </div>
+
+        <div class="name-group">
+            <span style="color:#aaa; width:65px;">组件类型:</span>
+            <select id="moduleCompType" class="name-input" style="appearance: auto; cursor: pointer;">
+                <option value="image">图片 (sp_)</option>
+                <option value="button">按钮 (btn_)</option>
+                <option value="texture">大图 (tex_)</option>
+                <option value="slider">滑条 (sli_)</option>
+                <option value="dropdown">下拉菜单 (drop_)</option>
+                <option value="toggle">勾选按钮 (tog_)</option>
+            </select>
+        </div>
+
+        <!-- 4. 尺寸规格 -->
+        <div class="name-group">
+            <span style="color:#aaa; width:65px;">尺寸后缀:</span>
+            <input type="number" id="moduleSizeW" class="size-input" style="width:40px;" placeholder="宽">
+            <span style="color:#555; margin:0 2px;">x</span>
+            <input type="number" id="moduleSizeH" class="size-input" style="width:40px;" placeholder="高">
+            <span id="btnResetSize" style="font-size: 10px; color: #aaa; cursor: pointer; margin-left: 6px; border: 1px solid #444; padding: 1px 4px; border-radius: 2px;" title="重置为原图尺寸">重置</span>
+            <span id="btnOpenPreset" style="font-size: 10px; color: #4fc3f7; cursor: pointer; margin-left: 4px; border: 1px solid #4fc3f7; padding: 1px 6px; border-radius: 2px;" title="管理尺寸预设">+</span>
+            <span style="font-size:10px; color:#666; margin-left:6px;" id="lblRealSize">(-)</span>
+            
+            <!-- 预设下拉菜单 (绝对定位) -->
+            <div id="presetMenu" style="display:none; position:absolute; top:28px; right:0; width:120px; background:#252525; border:1px solid #444; border-radius:4px; z-index:100; box-shadow:0 4px 10px rgba(0,0,0,0.5); padding:6px;">
+                <div style="font-size:10px; color:#888; margin-bottom:4px; border-bottom:1px solid #333; padding-bottom:4px;">尺寸预设</div>
+                <div id="presetList" style="max-height:150px; overflow-y:auto;"></div>
+                <div id="btnAddCurrentPreset" style="margin-top:6px; font-size:10px; color:#00e676; cursor:pointer; text-align:center; border-top:1px solid #333; pt:4px;">+ 添加当前尺寸</div>
+            </div>
+        </div>
+
+        <!-- 5. 九宫格信息 (补回) -->
+        <div class="name-group">
+            <span style="color:#aaa; width:65px;">九宫格:</span>
+            <div id="moduleSliceDisplay" style="flex:1; background:#222; color:#00e676; font-size:11px; padding:6px; border:1px solid #333; border-radius:3px; min-height:14px;">无</div>
+        </div>
+
+        <!-- 6. 导出控制 (胶囊开关) -->
+        <div class="row" style="margin-top:10px;">
+            <span style="color:#aaa;">导出控制 (是否切图):</span>
+            <label class="switch">
+                <input type="checkbox" id="chkExportEnable">
+                <span class="slider-round"></span>
+            </label>
+        </div>
+
+        <!-- 7. 命名预览 -->
+        <div class="preview-box">
+            <div class="preview-item" style="border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 4px;">
+                PS 图层命名 (元数据): <span id="previewProject" class="preview-value" style="color: #aaa;">-</span>
+            </div>
+            <div class="preview-item">
+                导出文件命名: <span id="previewExport" class="preview-value" style="color: #00e676;">-</span>
+            </div>
+            <div class="preview-item">
+                工程命名 (Unity): <span id="previewUnity" class="preview-value" style="color: #ffca28;">-</span>
+            </div>
+        </div>
+
+        <div style="margin-top: 15px;">
+            <button id="btnApplyModularName" class="btn-primary" style="width: 100%;">确认并应用重命名</button>
+        </div>
+    </div>
+
+    <!-- 2. 九宫格 Tab -->
+    <div id="tab-slice" class="tab-content">
+        <button id="btnFetchSlice" style="width: 100%; margin-bottom: 10px; background:#4A148C; color:white; border:none;">1. 读取当前选中图层...</button>
+
+        <div id="sliceEditorArea" style="display:none;">
+            <div class="canvas-wrapper" id="canvasWrapper">
+                <div id="canvasBox">
+                    <img id="previewImage" src="" />
+                    <div id="standardBounds"></div>
+                    <div id="gLeft" class="guide vertical" style="left: 20%;"></div>
+                    <div id="gRight" class="guide vertical" style="left: 80%;"></div>
+                    <div id="gTop" class="guide horizontal" style="top: 20%;"></div>
+                    <div id="gBottom" class="guide horizontal" style="top: 80%;"></div>
+                </div>
+            </div>
+            <!-- 高度调节手柄 -->
+            <div id="canvasResizer" style="height: 6px; background: #333; cursor: ns-resize; margin-top: 2px; border-radius: 3px; display: flex; justify-content: center; align-items: center; transition: background 0.2s;" 
+                 onmouseover="this.style.background='#555'" onmouseout="this.style.background='#333'">
+                <div style="width: 25px; height: 2px; background: #666; border-radius: 1px;"></div>
+            </div>
+
+            <div class="zoom-bar">
+                <span style="cursor:pointer; color:#aaa;" id="btnZoomOut">缩小</span>
+                <input type="range" id="zoomSlider" min="0.2" max="5" step="0.1" value="1" style="flex:1;">
+                <span style="cursor:pointer; color:#aaa;" id="btnZoomIn">放大</span>
+                <span id="zoomLabel" style="width:35px; text-align:right;">100%</span>
+            </div>
+
+            <!-- 裁剪结果预览 -->
+            <div style="margin-top: 10px; border-top: 1px solid #333; padding-top: 10px;">
+                <div style="font-size: 10px; color: #888; margin-bottom: 5px;">裁剪后结果预览 (减重效果):</div>
+                <div id="cropPreviewContainer" style="background: #111; border: 1px solid #333; border-radius: 4px; display: flex; justify-content: center; align-items: center; padding: 20px; overflow: hidden; min-height: 80px;">
+                    <div id="cropPreviewResult" style="position: relative; box-shadow: 0 0 10px rgba(0,0,0,0.5);">
+                        <!-- 通过 JS 动态生成 4-9 个片段模拟裁剪 -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="slice-control-bar">
+                <button id="btnRecenter" title="回到视图中心">📍 居中图片</button>
+                <button id="btnResetGuides" title="将九宫格参考线归零">🔄 重置参考线</button>
+            </div>
+
+            <div class="slice-inputs">
+                <div></div>
+                <div class="input-group">
+                    <span>上 (Top)</span>
+                    <input type="number" id="valTop" value="0" min="0" step="1">
+                </div>
+                <div></div>
+
+                <div class="input-group">
+                    <span>左 (Left)</span>
+                    <input type="number" id="valLeft" value="0" min="0" step="1">
+                </div>
+                <button id="btnApplySlice" class="btn-primary" style="font-size:11px; padding:6px; height:30px; margin-top:14px;">确认应用</button>
+                <div class="input-group">
+                    <span>右 (Right)</span>
+                    <input type="number" id="valRight" value="0" min="0" step="1">
+                </div>
+
+                <div></div>
+                <div class="input-group">
+                    <span>下 (Bottom)</span>
+                    <input type="number" id="valBottom" value="0" min="0" step="1">
+                </div>
+                <div></div>
+            </div>
+            <div style="text-align: center; margin-top: 8px; font-size: 10px; color: #888;">
+                拖动绿线，或输入数值。点击应用写入图层名。
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. 导出 Tab -->
+    <div id="tab-export" class="tab-content">
+        <!-- 新增：输出目录配置区 (拆分) -->
+        <div style="background: #222; border: 1px solid #444; border-radius: 4px; padding: 8px; margin-bottom: 12px;">
+            <!-- JSON 存放目录 -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-weight: bold; font-size: 11px; color: #aaa;">JSON 存放目录</span>
+                <button id="btnSetJsonFolder" style="padding: 2px 8px; font-size: 10px; background: #555;">更改目录...</button>
+            </div>
+            <div id="txtJsonPath" style="font-size: 11px; color: #4fc3f7; word-break: break-all; min-height: 15px; margin-bottom: 10px; user-select: text;">尚未设置 JSON 目录</div>
+
+            <!-- 图片存放目录 -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; border-top: 1px dashed #444; padding-top: 8px;">
+                <span style="font-weight: bold; font-size: 11px; color: #aaa;">图片存放目录</span>
+                <button id="btnSetImageFolder" style="padding: 2px 8px; font-size: 10px; background: #555;">更改目录...</button>
+            </div>
+            <div id="txtImagePath" style="font-size: 11px; color: #4fc3f7; word-break: break-all; min-height: 15px; user-select: text;">尚未设置图片目录</div>
+        </div>
+
+        <button id="btnScan" style="width: 100%; margin-bottom: 8px; background:#1b5e20; color:white; border:none;">1. 扫描变动 (对比旧数据)</button>
+
+        <div class="diff-container" id="diffList">
+            <div style="text-align:center; padding:30px; color:#666; font-size:11px;">点击上方按钮进行扫描</div>
+        </div>
+
+        <div class="row" style="font-size:11px;">
+            <label><input type="checkbox" id="chkSelectAll" checked> 全选</label>
+            <span id="diffSummary" style="color:#aaa;">共 0 个变动</span>
+        </div>
+
+        <button id="btnExport" class="btn-primary" style="width: 100%; margin-top:4px;" disabled>2. 仅导出勾选图层</button>
+    </div>
+
+    <!-- 4. Tools-Box Tab -->
+    <div id="tab-tools" class="tab-content">
+        <div class="title">无损九宫格拉伸 (9-Slice Scale)</div>
+        <div style="font-size:11px; color:#aaa; margin-bottom: 10px; line-height: 1.4;">
+            第一步：在【九宫格】页签中为你选中的图层设置好参考线，并点击“应用”。<br>
+            第二步：点击下方按钮，将其转为可随意拉伸的智能对象。
+        </div>
+
+        <button id="btnMakeScalable" style="width: 100%; margin-bottom: 10px; background:#4A148C; color:white; border:none; padding:8px;">1. 转换为可拉伸智能对象</button>
+
+        <div style="font-size:11px; color:#aaa; margin-bottom: 10px; line-height: 1.4;">
+            第三步：在 PS 中按 Ctrl+T 随意拖拽拉大这个图层。<br>
+            第四步：虽然它现在变形了，但点击下方按钮，即可魔法还原四个角！
+        </div>
+
+        <button id="btnRestoreScale" class="btn-primary" style="width: 100%; padding:10px;">2. 执行九宫格无损重绘还原</button>
+    </div>
+
+    <!-- 底部状态栏 -->
+    <div id="status">面板已加载。</div>
+    <!-- 新增：详细日志打印区 -->
+    <div id="logArea" style="height: 60px; overflow-y: auto; background: #111; color: #aaa; font-family: monospace; font-size: 10px; padding: 4px; margin-top: 4px; border-top: 1px solid #333;">
+        [Log] 等待操作...
+    </div>
+
+    <script src="js/main.js"></script>
+</body>
+</html>
