@@ -20,62 +20,137 @@ function logMsg(msg) {
 }
 
 // ==========================================
-// Github 热更新逻辑 (Node.js + PowerShell)
+// 加载本地版本号展示 (通过 XHR 稳定读取)
 // ==========================================
-function checkAutoUpdate() {
+function loadLocalVersionDisplay() {
+    logMsg("开始尝试读取本地版本号...");
     try {
-        var fs = require('fs');
-        var path = require('path');
-        var cp = require('child_process');
-        var https = require('https');
-        var os = require('os');
+        var xhr = new XMLHttpRequest();
+        xhr.overrideMimeType("application/json");
+        xhr.open("GET", "version.json", false); // 同步请求，确保第一时间读到
+        xhr.send(null);
+        if (xhr.status === 200 || xhr.status === 0) {
+            var dataStr = xhr.responseText;
+            // 过滤隐形 BOM 字符
+            if (dataStr.charCodeAt(0) === 0xFEFF) {
+                dataStr = dataStr.slice(1);
+            }
+            var lData = JSON.parse(dataStr);
+            var ver = lData.version || "未知版本";
 
-        var localExtPath = csInterface.getSystemPath(SystemPath.EXTENSION);
-        var localVerFile = path.join(localExtPath, 'version.json');
-        var localVersion = "1.0.0";
+            logMsg("✅ 插件版本: v" + ver);
 
-        if (fs.existsSync(localVerFile)) {
+            // 尝试设置窗口标题
             try {
-                var lData = JSON.parse(fs.readFileSync(localVerFile, 'utf8'));
-                localVersion = lData.version || "1.0.0";
-            } catch(e) {}
-        }
-
-        // ===============================================
-        // 👉 Github 仓库信息
-        // ===============================================
-        var githubOwner = "dreamforgame-win";
-        var repoName = "PS-Tool";
-        var branch = "main";
-
-        // Github API/Raw 下载地址构建
-        var rawVersionUrl = "https://raw.githubusercontent.com/" + githubOwner + "/" + repoName + "/" + branch + "/version.json";
-        var zipDownloadUrl = "https://github.com/" + githubOwner + "/" + repoName + "/archive/refs/heads/" + branch + ".zip";
-
-        // 请求 Github 上的 version.json
-        https.get(rawVersionUrl, function(res) {
-            var data = '';
-            res.on('data', function(chunk) { data += chunk; });
-            res.on('end', function() {
-                try {
-                    var remoteData = JSON.parse(data);
-                    if (remoteData.version && remoteData.version !== localVersion) {
-                        showUpdateBanner(remoteData.version, zipDownloadUrl, repoName, branch, localExtPath, cp, path, os);
-                    }
-                } catch(e) {
-                    console.log("解析远端版本失败，可能是网络拦截或路径错误", e);
+                if (typeof csInterface.setWindowTitle === 'function') {
+                    csInterface.setWindowTitle("UI-Link Exporter v" + ver);
                 }
-            });
-        }).on('error', function(err) {
-            console.log("无法连接到 Github 获取版本信息", err);
-        });
+            } catch(e) {}
 
-    } catch (e) {
-        console.log("Auto-update init failed:", e);
+            var botEl = document.getElementById("verDisplay");
+            if (botEl) botEl.innerText = "v" + ver;
+
+            var setEl = document.getElementById("settingVerDisplay");
+            if (setEl) setEl.innerText = "v" + ver;
+
+        } else {
+            logMsg("⚠️ 读取 version.json 失败，状态码: " + xhr.status);
+        }
+    } catch(e) {
+        logMsg("❌ 读取版本异常: " + e.message);
     }
 }
 
-function showUpdateBanner(newVersion, zipUrl, repoName, branch, localExtPath, cp, path, os) {
+// ==========================================
+// Github 热更新逻辑 (跨域加强版 XHR)
+// ==========================================
+var githubOwner_global = "dreamforgame-win";
+
+function checkAutoUpdate(isManual) {
+    var githubOwner = githubOwner_global;
+    var repoName = "PS-Tool";
+    var branch = "main";
+
+    // 使用 jsdelivr CDN 作为反向代理，彻底解决纯前端访问 GitHub Raw 的跨域/被墙问题
+    var cdnUrl = "https://cdn.jsdelivr.net/gh/" + githubOwner + "/" + repoName + "@" + branch + "/version.json?t=" + new Date().getTime();
+    var zipDownloadUrl = "https://github.com/" + githubOwner + "/" + repoName + "/archive/refs/heads/" + branch + ".zip";
+
+    if (isManual) logMsg("开始通过 CDN 请求远端版本号...");
+
+    var xhr = new XMLHttpRequest();
+    xhr.overrideMimeType("application/json");
+    // 强制允许跨域
+    xhr.withCredentials = false;
+    xhr.open("GET", cdnUrl, true);
+
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+            if (xhr.status === 200) {
+                try {
+                    var remoteData = JSON.parse(xhr.responseText);
+                    var botEl = document.getElementById("verDisplay");
+                    var localVersion = botEl ? botEl.innerText.replace("v", "") : "1.0.0";
+                    if (localVersion === "-") localVersion = "1.0.0";
+
+                    if (isManual) logMsg("云端版本: " + remoteData.version + " | 本地版本: " + localVersion);
+
+                    var btnForce = document.getElementById("btnForceCheckUpdate");
+                    if (remoteData.version && remoteData.version !== localVersion) {
+                        if (btnForce) {
+                            btnForce.innerText = "🎉 发现新版本！点击顶部横幅更新";
+                            btnForce.style.background = "#4CAF50";
+                            btnForce.style.color = "#fff";
+                        }
+                        showUpdateBanner(remoteData.version, zipDownloadUrl, repoName, branch);
+                        setStatus("发现新版本 v" + remoteData.version + "，请点击顶部横幅更新", "");
+                    } else {
+                        if (isManual) {
+                            setStatus("当前已经是最新版本 (" + localVersion + ")，无需更新。", "");
+                            logMsg("已经是最新版本，无需更新。");
+                        }
+                        if (btnForce) {
+                            btnForce.disabled = false;
+                            btnForce.innerText = "🔄 检查更新 (当前已是最新版)";
+                            btnForce.style.background = "#444";
+                            btnForce.style.color = "#aaa";
+                        }
+                    }
+                } catch(e) {
+                    if (isManual) logMsg("解析远端版本 JSON 失败: " + e.message);
+                    resetBtnForce();
+                }
+            } else {
+                if (isManual) logMsg("热更检测失败，状态码: " + xhr.status);
+                resetBtnForce();
+            }
+        }
+    };
+
+    xhr.onerror = function() {
+        if (isManual) logMsg("热更请求遭遇网络异常或跨域拦截");
+        resetBtnForce();
+    };
+
+    try {
+        xhr.send(null);
+    } catch(e) {
+        if (isManual) logMsg("发送请求失败: " + e.message);
+        resetBtnForce();
+    }
+
+    function resetBtnForce() {
+        var btnForce = document.getElementById("btnForceCheckUpdate");
+        if (btnForce) {
+            btnForce.disabled = false;
+            btnForce.innerText = "❌ 检测失败，请检查网络或代理";
+            btnForce.style.background = "#F44336";
+            btnForce.style.color = "#fff";
+        }
+        setStatus("检测更新失败，请查看日志", "error");
+    }
+}
+
+function showUpdateBanner(newVersion, zipUrl, repoName, branch) {
     var banner = document.getElementById("updateBanner");
     if (!banner) return;
 
@@ -83,44 +158,52 @@ function showUpdateBanner(newVersion, zipUrl, repoName, branch, localExtPath, cp
     document.getElementById("newVersionText").innerText = newVersion;
 
     banner.onclick = function() {
-        banner.innerText = "⏳ 正在从 Github 下载更新并解压，请稍候...";
+        banner.innerText = "⏳ 正在静默下载并覆盖更新，请稍候...";
         banner.style.pointerEvents = "none";
         banner.style.background = "#FFC107";
 
-        var tmpZip = path.join(os.tmpdir(), "uilink_update.zip");
-        var tmpDir = path.join(os.tmpdir(), "uilink_update_dir");
+        var localExtPath = csInterface.getSystemPath(SystemPath.EXTENSION);
+        var tmpZip = "$env:TEMP\\uilink_update.zip";
+        var tmpDir = "$env:TEMP\\uilink_update_dir";
 
-        // 构建一条强力的 PowerShell 脚本：下载 -> 删旧解压夹 -> 解压 -> 强行覆盖拷贝 -> 删垃圾
         var psScript =
             "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; " +
-            "Invoke-WebRequest -Uri '" + zipUrl + "' -OutFile '" + tmpZip + "'; " +
-            "if(Test-Path '" + tmpDir + "') { Remove-Item -Recurse -Force '" + tmpDir + "' }; " +
-            "Expand-Archive -Path '" + tmpZip + "' -DestinationPath '" + tmpDir + "' -Force; " +
+            "Invoke-WebRequest -Uri '" + zipUrl + "' -OutFile " + tmpZip + "; " +
+            "if(Test-Path " + tmpDir + ") { Remove-Item -Recurse -Force " + tmpDir + " }; " +
+            "Expand-Archive -Path " + tmpZip + " -DestinationPath " + tmpDir + " -Force; " +
             "xcopy '" + tmpDir + "\\" + repoName + "-" + branch + "\\*' '" + localExtPath + "\\' /s /e /y /c /h; ";
 
-        var cmd = 'powershell -Command "' + psScript + '"';
+        if (window.cep && window.cep.process && typeof window.cep.process.createProcess === 'function') {
+            logMsg("尝试使用 cep.process 执行 PowerShell 热更...");
+            window.cep.process.createProcess("powershell.exe", "-Command", psScript);
 
-        cp.exec(cmd, function(err, stdout, stderr) {
-            if (err) {
-                banner.innerText = "❌ 更新失败，请检查网络（Github下载可能超时）！";
-                banner.style.background = "#F44336";
-                console.error(err);
-            } else {
-                banner.innerText = "✅ 更新完成！正在重载面板...";
+            // 粗暴延迟 5 秒后强制重载面板
+            setTimeout(function() {
+                banner.innerText = "✅ 更新指令已发送！正在重载面板...";
                 banner.style.background = "#4CAF50";
-                // 延迟刷新应用更新
-                setTimeout(function() {
-                    window.location.reload(true);
-                }, 1000);
-            }
-        });
+                setTimeout(function() { window.location.reload(true); }, 1500);
+            }, 5000);
+        } else {
+            banner.innerText = "❌ 你的 PS 环境不支持静默更新，请手动下载！";
+            banner.style.background = "#F44336";
+            setTimeout(function() {
+                window.cep.util.openURLInDefaultBrowser("https://github.com/" + githubOwner_global + "/" + repoName + "/releases");
+            }, 1500);
+        }
     };
 }
 
 document.addEventListener("DOMContentLoaded", function() {
 
+    // 首先清空一次 log，防止重叠
+    var logArea = document.getElementById("logArea");
+    if(logArea) logArea.innerHTML = "";
+
+    // 立即执行本地版本显示
+    try { loadLocalVersionDisplay(); } catch(e) { logMsg("调用版本显示失败：" + e); }
+
     // 初始化时检测热更
-    setTimeout(checkAutoUpdate, 1500);
+    try { setTimeout(checkAutoUpdate, 1500); } catch(e) { logMsg("调用热更检测失败：" + e); }
 
     // ==========================================
     // 0. Tab 切换逻辑
@@ -1247,6 +1330,28 @@ document.addEventListener("DOMContentLoaded", function() {
                     else setStatus("还原成功！边缘已完美重建。", "");
                 });
             }, 100);
+        });
+    }
+
+    // ==========================================
+    // 5. Setting 页签: 强制检查更新
+    // ==========================================
+    var btnForceCheckUpdate = document.getElementById("btnForceCheckUpdate");
+    if (btnForceCheckUpdate) {
+        btnForceCheckUpdate.addEventListener("click", function() {
+            logMsg("==== 开始手动检测更新 ====");
+            setStatus("正在连接 Github 检测最新版本...", "warning");
+            btnForceCheckUpdate.disabled = true;
+            btnForceCheckUpdate.innerText = "⏳ 正在检测...";
+
+            // 手动调用热更新函数
+            try {
+                checkAutoUpdate(true);
+            } catch (e) {
+                logMsg("手动检测更新异常: " + e.message);
+                btnForceCheckUpdate.disabled = false;
+                btnForceCheckUpdate.innerText = "🔄 检查更新 (检测 Github 最新版本)";
+            }
         });
     }
 

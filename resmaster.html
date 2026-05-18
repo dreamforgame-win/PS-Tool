@@ -81,12 +81,28 @@
             <input type="text" id="searchInput" placeholder="Search (Enter for global)...">
             <span style="font-size: 10px; color: #666; margin-right: 8px;">ZOOM</span>
             <input type="range" id="zoomSlider" min="30" max="150" value="70">
+            <span id="resVerDisplay" style="font-size: 10px; color: #555; margin-left: 10px; font-weight: bold;">v---</span>
         </div>
     </div>
 
     <script src="js/CSInterface.js"></script>
     <script>
         var csInterface = new CSInterface();
+
+        // 尝试读取当前版本号显示在右下角
+        try {
+            var fs = require('fs');
+            var path = require('path');
+            var localExtPath = csInterface.getSystemPath(SystemPath.EXTENSION);
+            var localVerFile = path.join(localExtPath, 'version.json');
+            if (fs.existsSync(localVerFile)) {
+                var lData = JSON.parse(fs.readFileSync(localVerFile, 'utf8'));
+                var ver = lData.version || "1.0.0";
+                document.getElementById("resVerDisplay").innerText = "v" + ver;
+                csInterface.setWindowTitle("Res-Master v" + ver);
+            }
+        } catch(e) {}
+
         var resRoot = localStorage.getItem("ResMaster_Root") || "";
         var resTree = document.getElementById("res-tree");
         var resContent = document.getElementById("res-content");
