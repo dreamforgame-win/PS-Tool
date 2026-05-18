@@ -252,7 +252,8 @@ function showUpdateBanner(newVersion, zipUrl, repoName, branch) {
                     var result = window.cep.fs.writeFile(tmpZip, xhr.response);
                     if (result === window.cep.fs.NO_ERROR) {
                         // 依然需要 PowerShell 来解压，但只需简单的解压命令
-                        var psExtract = "Expand-Archive -Path '" + tmpZip + "' -DestinationPath '" + tmpDir + "' -Force; " +
+                        var psExtract = "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; " +
+                                        "Expand-Archive -Path '" + tmpZip + "' -DestinationPath '" + tmpDir + "' -Force; " +
                                         "$src = Join-Path '" + tmpDir + "' '" + repoName + "-" + branch + "\\*'; " +
                                         "$dest = '" + localExtPath + "\\'; " +
                                         "$argList = '/c \"xcopy \"\"' + $src + '\"\" \"\"' + $dest + '\"\" /s /e /y /c /h & echo SUCCESS > \"\"' + statusFile + '\"\"\"'; " +
