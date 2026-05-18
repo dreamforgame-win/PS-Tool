@@ -74,11 +74,14 @@ function checkAutoUpdate(isManual) {
     // 终极降级方案：完全放弃对 Github API 和 Raw 的依赖！
     // 因为这两种方式极易被运营商墙掉或者被 Github 返回 403 频率限制。
     // 我们改为轮询多个 CDN 源，防止某个 CDN 被墙导致无法更新
+    // 注意：jsDelivr 对 Github 分支文件有极强的 12~24 小时强制缓存，且无视 ?t= 查询参数。
+    // 因此我们将直连和原生代理镜像放在最前面，jsDelivr 作为最后兜底。
     var cdns = [
-        "https://cdn.jsdelivr.net/gh/" + githubOwner + "/" + repoName + "@" + branch + "/version.json?t=",
-        "https://fastly.jsdelivr.net/gh/" + githubOwner + "/" + repoName + "@" + branch + "/version.json?t=",
         "https://raw.gitmirror.com/" + githubOwner + "/" + repoName + "/" + branch + "/version.json?t=",
-        "https://raw.githubusercontent.com/" + githubOwner + "/" + repoName + "/" + branch + "/version.json?t="
+        "https://ghp.ci/https://raw.githubusercontent.com/" + githubOwner + "/" + repoName + "/" + branch + "/version.json?t=",
+        "https://raw.githubusercontent.com/" + githubOwner + "/" + repoName + "/" + branch + "/version.json?t=",
+        "https://cdn.jsdelivr.net/gh/" + githubOwner + "/" + repoName + "@" + branch + "/version.json?t=",
+        "https://fastly.jsdelivr.net/gh/" + githubOwner + "/" + repoName + "@" + branch + "/version.json?t="
     ];
 
     var currentCdnIndex = 0;
@@ -668,6 +671,8 @@ document.addEventListener("DOMContentLoaded", function() {
     var canvasBox = document.getElementById("canvasBox");
     var previewImage = document.getElementById("previewImage");
     var canvasResizer = document.getElementById("canvasResizer");
+    var cropPreviewContainer = document.getElementById("cropPreviewContainer");
+    var previewResizer = document.getElementById("previewResizer");
 
     // 缩放与平移变量
     var currentZoom = 1;
@@ -678,9 +683,16 @@ document.addEventListener("DOMContentLoaded", function() {
     var startResizeY = 0;
     var startHeight = 0;
 
+    var isResizingPreview = false;
+    var startPreviewResizeY = 0;
+    var startPreviewHeight = 0;
+
     // 从本地存储恢复高度
     var savedHeight = localStorage.getItem("UILink_SliceCanvasHeight") || "300";
-    canvasWrapper.style.height = savedHeight + "px";
+    if (canvasWrapper) canvasWrapper.style.height = savedHeight + "px";
+
+    var savedPreviewHeight = localStorage.getItem("UILink_PreviewCanvasHeight") || "120";
+    if (cropPreviewContainer) cropPreviewContainer.style.height = savedPreviewHeight + "px";
 
     var guides = {
         left: document.getElementById("gLeft"),
@@ -695,13 +707,25 @@ document.addEventListener("DOMContentLoaded", function() {
         bottom: document.getElementById("valBottom")
     };
 
-    canvasResizer.addEventListener("mousedown", function(e) {
-        isResizingHeight = true;
-        startResizeY = e.clientY;
-        startHeight = canvasWrapper.offsetHeight;
-        document.body.style.cursor = "ns-resize";
-        e.preventDefault();
-    });
+    if (canvasResizer) {
+        canvasResizer.addEventListener("mousedown", function(e) {
+            isResizingHeight = true;
+            startResizeY = e.clientY;
+            startHeight = canvasWrapper.offsetHeight;
+            document.body.style.cursor = "ns-resize";
+            e.preventDefault();
+        });
+    }
+
+    if (previewResizer) {
+        previewResizer.addEventListener("mousedown", function(e) {
+            isResizingPreview = true;
+            startPreviewResizeY = e.clientY;
+            startPreviewHeight = cropPreviewContainer.offsetHeight;
+            document.body.style.cursor = "ns-resize";
+            e.preventDefault();
+        });
+    }
 
     btnFetchSlice.addEventListener("click", function() {
         setStatus("正在获取图层预览...", "warning");
@@ -788,7 +812,12 @@ document.addEventListener("DOMContentLoaded", function() {
                     updateCropPreview(); // 初始化显示裁剪预览
                     setStatus("请拖动参考线设置切图区域", "");
                 };
-                previewImage.src = "data:image/png;base64," + data.b64;
+
+                // 核心性能优化：直接使用本地硬盘路径加载图片，避开耗时的 Base64 编解码
+                // 加上时间戳防止缓存
+                var safePath = data.path.replace(/\\/g, "/");
+                previewImage.src = "file:///" + safePath + "?t=" + new Date().getTime();
+
             } catch(e) {
                 setStatus("解析预览失败: " + e, "error");
             }
@@ -867,6 +896,13 @@ document.addEventListener("DOMContentLoaded", function() {
             localStorage.setItem("UILink_SliceCanvasHeight", newHeight);
             return;
         }
+        if (isResizingPreview) {
+            var deltaPreview = e.clientY - startPreviewResizeY;
+            var newPreviewHeight = Math.max(80, Math.min(800, startPreviewHeight + deltaPreview));
+            if (cropPreviewContainer) cropPreviewContainer.style.height = newPreviewHeight + "px";
+            localStorage.setItem("UILink_PreviewCanvasHeight", newPreviewHeight);
+            return;
+        }
         if (isPanning) {
             panX = e.clientX - startPanX;
             panY = e.clientY - startPanY;
@@ -922,6 +958,10 @@ document.addEventListener("DOMContentLoaded", function() {
     document.addEventListener('mouseup', function(e) {
         if (isResizingHeight) {
             isResizingHeight = false;
+            document.body.style.cursor = "default";
+        }
+        if (isResizingPreview) {
+            isResizingPreview = false;
             document.body.style.cursor = "default";
         }
         if (isPanning) {
@@ -982,12 +1022,24 @@ document.addEventListener("DOMContentLoaded", function() {
         var w = currentSliceData.realW;
         var h = currentSliceData.realH;
 
-        // 计算预览图的总宽高
+        // 计算预览图的总宽高 (物理像素尺寸)
         var finalW = (l + r > 0) ? (l + r) : w;
         var finalH = (t + b > 0) ? (t + b) : h;
 
+        // --- 核心改动：自适应缩放以适配容器 ---
+        var containerW = cropPreviewContainer.clientWidth - 40; // 减去 padding
+        var containerH = cropPreviewContainer.clientHeight - 40;
+
+        var scale = 1;
+        if (finalW > containerW || finalH > containerH) {
+            scale = Math.min(containerW / finalW, containerH / finalH);
+        }
+
+        // 应用缩放 (transform)
         resContainer.style.width = finalW + "px";
         resContainer.style.height = finalH + "px";
+        resContainer.style.transform = "scale(" + scale + ")";
+        resContainer.style.transformOrigin = "center center";
         resContainer.innerHTML = ""; // 清空旧切片
 
         var src = previewImage.src;

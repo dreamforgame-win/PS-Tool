@@ -352,10 +352,15 @@
             <!-- 裁剪结果预览 -->
             <div style="margin-top: 10px; border-top: 1px solid #333; padding-top: 10px;">
                 <div style="font-size: 10px; color: #888; margin-bottom: 5px;">裁剪后结果预览 (减重效果):</div>
-                <div id="cropPreviewContainer" style="background: #111; border: 1px solid #333; border-radius: 4px; display: flex; justify-content: center; align-items: center; padding: 20px; overflow: hidden; min-height: 80px;">
-                    <div id="cropPreviewResult" style="position: relative; box-shadow: 0 0 10px rgba(0,0,0,0.5);">
+                <div id="cropPreviewContainer" style="background: #111; border: 1px solid #333; border-radius: 4px; display: flex; justify-content: center; align-items: center; padding: 20px; overflow: hidden; height: 120px; min-height: 80px; position: relative;">
+                    <div id="cropPreviewResult" style="position: relative; box-shadow: 0 0 10px rgba(0,0,0,0.5); transform-origin: center center;">
                         <!-- 通过 JS 动态生成 4-9 个片段模拟裁剪 -->
                     </div>
+                </div>
+                <!-- 预览区高度调节手柄 -->
+                <div id="previewResizer" style="height: 6px; background: #333; cursor: ns-resize; margin-top: 2px; border-radius: 3px; display: flex; justify-content: center; align-items: center; transition: background 0.2s;"
+                     onmouseover="this.style.background='#555'" onmouseout="this.style.background='#333'">
+                    <div style="width: 25px; height: 2px; background: #666; border-radius: 1px;"></div>
                 </div>
             </div>
 

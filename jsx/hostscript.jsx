@@ -158,7 +158,7 @@ function applyLayerRename(infoStr) {
         var sliceStr = info.sliceSuffix || "0,0,0,0";
         var exportStr = info.isExport ? "1" : "0";
         var newName = rootBase + "|" + info.outputType + "|" + info.compType + "|" + sizeStr + "|" + sliceStr + "|" + exportStr;
-        
+
         // 【核心修复】查重校验
         var checkResult = checkDuplicateExportNames(layer.id, newName);
         if (checkResult !== "OK") {
@@ -673,12 +673,17 @@ function convertToScalable9Slice() {
             ];
             innerDoc.selection.select(selBounds);
 
-            // 核心修复：使用 "通过拷贝的图层" 原位创建切片，彻底杜绝 Paste 带来的位移
-            var idcopyToLayer = stringIDToTypeID( "copyToLayer" );
-            executeAction( idcopyToLayer, undefined, DialogModes.NO );
+            try {
+                // 核心修复：使用 "通过拷贝的图层" 原位创建切片，彻底杜绝 Paste 带来的位移
+                var idcopyToLayer = stringIDToTypeID( "copyToLayer" );
+                executeAction( idcopyToLayer, undefined, DialogModes.NO );
 
-            var newL = innerDoc.activeLayer;
-            newL.name = s.name;
+                var newL = innerDoc.activeLayer;
+                newL.name = s.name;
+            } catch(copyErr) {
+                // 忽略“选区是空的”导致的拷贝失败。比如中空边框，中间完全是透明像素。
+                // 还原方法 (restoreScaled9Slice) 能完美兼容确实切片的缺失。
+            }
             originalLayer.visible = false;
         }
 
@@ -688,9 +693,8 @@ function convertToScalable9Slice() {
         innerDoc.save();
         innerDoc.close(SaveOptions.DONOTSAVECHANGES);
 
-        // 修改图层名字打个 SMART 标记
-        // 此时 app.activeDocument 已经回到原来的文档，且选中了新生成的智能对象
-        doc.activeLayer.name = originalName + "|SMART";
+        // 恢复原有图层名称（不再追加 SMART 标签）
+        doc.activeLayer.name = originalName;
 
         return "SUCCESS";
     } catch(e) { return "ERROR: " + e.toString() + " (line " + e.line + ")"; }
@@ -701,10 +705,6 @@ function restoreScaled9Slice() {
         var doc = app.activeDocument;
         var layer = doc.activeLayer;
 
-        if (layer.name.indexOf("|SMART") === -1) {
-            return "ERROR: 图层必须是由 Tools-Box 生成的可拉伸九宫格对象（带有 SMART 标记）";
-        }
-
         var nameParts = layer.name.split("|");
         var sliceParams = (nameParts.length >= 6) ? nameParts[4] : "";
         var parts = sliceParams.split(",");
@@ -712,6 +712,10 @@ function restoreScaled9Slice() {
         var b = parseInt(parts[1], 10) || 0;
         var l = parseInt(parts[2], 10) || 0;
         var r = parseInt(parts[3], 10) || 0;
+
+        if (t === 0 && b === 0 && l === 0 && r === 0) {
+            return "ERROR: 未检测到有效的九宫格参数（不能全为 0）。请先应用九宫格并在图层名中包含切片参数。";
+        }
 
         var oldRulerUnits = app.preferences.rulerUnits;
         app.preferences.rulerUnits = Units.PIXELS;
@@ -729,6 +733,10 @@ function restoreScaled9Slice() {
              throw new Error("无法进入智能对象内部进行编辑！");
         }
 
+        // 保存原图尺寸 (也就是原先转化成九宫格时分配的容器尺寸)
+        var origW = innerDoc.width.as("px");
+        var origH = innerDoc.height.as("px");
+
         innerDoc.resizeCanvas(UnitValue(targetW, "px"), UnitValue(targetH, "px"), AnchorPosition.TOPLEFT);
 
         var getL = function(n) { try { return innerDoc.layers.getByName(n); } catch(e){ return null; } };
@@ -736,41 +744,54 @@ function restoreScaled9Slice() {
         var ml = getL("ML"), mc = getL("MC"), mr = getL("MR");
         var bl = getL("BL"), bc = getL("BC"), br = getL("BR");
 
-        if (tr) tr.translate(UnitValue(targetW - r - tr.bounds[0].as("px"), "px"), 0);
-        if (bl) bl.translate(0, UnitValue(targetH - b - bl.bounds[1].as("px"), "px"));
-        if (br) br.translate(UnitValue(targetW - r - br.bounds[0].as("px"), "px"), UnitValue(targetH - b - br.bounds[1].as("px"), "px"));
+        // 核心修复：完全抛弃原来生硬对齐 bounds 的做法
+        // 因为当区域内存在大面积透明时，bounds.left 根本不是切片容器的 left，这会导致对齐严重偏移。
+        // 正确做法：直接计算“缩放补偿”和“逻辑位移”
 
-        var resizeLayer = function(targetLayer, w, h) {
+        var scaleX_C = (origW - l - r) > 0 ? (targetW - l - r) / (origW - l - r) : 1;
+        var scaleY_M = (origH - t - b) > 0 ? (targetH - t - b) / (origH - t - b) : 1;
+
+        var processSlice = function(targetLayer, origSliceX, origSliceY, targetSliceX, targetSliceY, sX, sY) {
             if (!targetLayer) return;
-            var curW = targetLayer.bounds[2].as("px") - targetLayer.bounds[0].as("px");
-            var curH = targetLayer.bounds[3].as("px") - targetLayer.bounds[1].as("px");
+            var X0 = targetLayer.bounds[0].as("px");
+            var Y0 = targetLayer.bounds[1].as("px");
+            var curW = targetLayer.bounds[2].as("px") - X0;
+            var curH = targetLayer.bounds[3].as("px") - Y0;
             if (curW <= 0 || curH <= 0) return;
-            var scaleX = (w / curW) * 100;
-            var scaleY = (h / curH) * 100;
-            targetLayer.resize(scaleX, scaleY, AnchorPosition.TOPLEFT);
+
+            // 1. 原地缩放 (锚点固定在自己当前边界的左上角)
+            if (Math.abs(sX - 1) > 0.001 || Math.abs(sY - 1) > 0.001) {
+                targetLayer.resize(sX * 100, sY * 100, AnchorPosition.TOPLEFT);
+            }
+
+            // 2. 计算当前实际不透明像素相对于逻辑切片容器的间隙 (Gap)
+            var gapX = X0 - origSliceX;
+            var gapY = Y0 - origSliceY;
+
+            // 3. 计算在目标切片容器中，按同样比例放大的间隙，得出应该放置的新坐标
+            var newX = targetSliceX + gapX * sX;
+            var newY = targetSliceY + gapY * sY;
+
+            // 4. 计算需要平移的差值
+            var dx = newX - X0;
+            var dy = newY - Y0;
+
+            if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) {
+                targetLayer.translate(UnitValue(dx, "px"), UnitValue(dy, "px"));
+            }
         };
 
-        if (tc) {
-            resizeLayer(tc, targetW - l - r, t);
-            tc.translate(UnitValue(l - tc.bounds[0].as("px"), "px"), 0);
-        }
-        if (bc) {
-            resizeLayer(bc, targetW - l - r, b);
-            bc.translate(UnitValue(l - bc.bounds[0].as("px"), "px"), UnitValue(targetH - b - bc.bounds[1].as("px"), "px"));
-        }
-        if (ml) {
-            resizeLayer(ml, l, targetH - t - b);
-            ml.translate(0, UnitValue(t - ml.bounds[1].as("px"), "px"));
-        }
-        if (mr) {
-            resizeLayer(mr, r, targetH - t - b);
-            mr.translate(UnitValue(targetW - r - mr.bounds[0].as("px"), "px"), UnitValue(t - mr.bounds[1].as("px"), "px"));
-        }
+        processSlice(tl, 0, 0, 0, 0, 1, 1);
+        processSlice(tc, l, 0, l, 0, scaleX_C, 1);
+        processSlice(tr, origW - r, 0, targetW - r, 0, 1, 1);
 
-        if (mc) {
-            resizeLayer(mc, targetW - l - r, targetH - t - b);
-            mc.translate(UnitValue(l - mc.bounds[0].as("px"), "px"), UnitValue(t - mc.bounds[1].as("px"), "px"));
-        }
+        processSlice(ml, 0, t, 0, t, 1, scaleY_M);
+        processSlice(mc, l, t, l, t, scaleX_C, scaleY_M);
+        processSlice(mr, origW - r, t, targetW - r, t, 1, scaleY_M);
+
+        processSlice(bl, 0, origH - b, 0, targetH - b, 1, 1);
+        processSlice(bc, l, origH - b, l, targetH - b, scaleX_C, 1);
+        processSlice(br, origW - r, origH - b, targetW - r, targetH - b, 1, 1);
 
         innerDoc.save();
         innerDoc.close(SaveOptions.DONOTSAVECHANGES);
@@ -838,24 +859,21 @@ function getActiveLayerPreview() {
 
         var tmpFile = new File(Folder.temp.fsName + "/uilink_preview.png");
         var opts = new PNGSaveOptions();
-        opts.compression = 9;
+        // 核心性能优化：将压缩率从 9 降至 0 以实现毫秒级生成。
+        opts.compression = 0;
         tempDoc.saveAs(tmpFile, opts, true, Extension.LOWERCASE);
         tempDoc.close(SaveOptions.DONOTSAVECHANGES);
 
-        tmpFile.encoding = "BINARY";
-        tmpFile.open("r");
-        var binaryString = tmpFile.read();
-        tmpFile.close();
-        tmpFile.remove();
-
+        // 【终极性能优化】放弃耗时极大的 JS 层面 base64 逐字编码！
+        // 直接向前端返回图片的物理绝对路径，让 Chromium 原生引擎去加载硬盘图片。
         app.preferences.rulerUnits = oldUnit;
-        return JSON.stringify({ 
-            b64: encodeBase64(binaryString), 
-            width: w, 
+        return JSON.stringify({
+            path: tmpFile.fsName,
+            width: w,
             height: h
         });
-    } catch(e) { 
-        return "ERROR: " + e.toString(); 
+    } catch(e) {
+        return "ERROR: " + e.toString();
     }
 }
 
@@ -871,7 +889,8 @@ function applyNineSliceCrop(top, bottom, left, right) {
         if (parts.length >= 6) {
             // 如果已经是新格式，只替换九宫格部分 (索引为 4)
             parts[4] = sliceStr;
-            layer.name = parts.join("|");
+            var newNameStr = parts[0] + "|" + parts[1] + "|" + parts[2] + "|" + parts[3] + "|" + parts[4] + "|" + parts[5];
+            layer.name = newNameStr;
         } else {
             // 如果是旧格式，尝试转换为新格式的基础结构
             var docName = doc.name.split(".")[0];
@@ -880,8 +899,9 @@ function applyNineSliceCrop(top, bottom, left, right) {
             var bounds = layer.bounds;
             var w = Math.round(bounds[2].value - bounds[0].value);
             var h = Math.round(bounds[3].value - bounds[1].value);
-            
-            layer.name = docName + "_" + baseName + "|atlas|image|" + w + "x" + h + "|" + sliceStr + "|1";
+
+            var newNameStr = docName + "_" + baseName + "|atlas|image|" + w + "x" + h + "|" + sliceStr + "|1";
+            layer.name = newNameStr;
         }
         return layer.name; // 返回新名称供前端同步
     } catch(e) { return "ERROR:" + e.toString(); }
