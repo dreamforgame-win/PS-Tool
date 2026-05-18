@@ -62,7 +62,7 @@ function loadLocalVersionDisplay() {
 }
 
 // ==========================================
-// Github 热更新逻辑 (GitHub API + 管理员提权)
+// Github 热更新逻辑 (防缓存的 CDN 原生请求方案)
 // ==========================================
 var githubOwner_global = "dreamforgame-win";
 
@@ -71,14 +71,15 @@ function checkAutoUpdate(isManual) {
     var repoName = "PS-Tool";
     var branch = "main";
 
-    // 使用 GitHub API 直接读取内容，彻底绕过 CDN 的顽固缓存
-    var apiUrl = "https://api.github.com/repos/" + githubOwner + "/" + repoName + "/contents/version.json?ref=" + branch + "&t=" + new Date().getTime();
+    // Github API 获取 releases 的 latest 信息
+    var apiUrl = "https://api.github.com/repos/" + githubOwner + "/" + repoName + "/releases/latest?t=" + new Date().getTime();
     var zipDownloadUrl = "https://github.com/" + githubOwner + "/" + repoName + "/archive/refs/heads/" + branch + ".zip";
 
-    if (isManual) logMsg("开始通过 GitHub API 请求远端版本号...");
+    if (isManual) logMsg("开始请求远端 Release 版本号...");
 
     var xhr = new XMLHttpRequest();
     xhr.overrideMimeType("application/json");
+    // 不携带凭证，防止复杂网络环境下的跨域被拒
     xhr.withCredentials = false;
     xhr.open("GET", apiUrl, true);
 
@@ -86,27 +87,27 @@ function checkAutoUpdate(isManual) {
         if (xhr.readyState === 4) {
             if (xhr.status === 200) {
                 try {
-                    var response = JSON.parse(xhr.responseText);
-                    // GitHub API 返回的是 base64 编码的文件内容，需要解码
-                    // 使用 escape + decodeURIComponent 解决中文乱码和特殊字符问题
-                    var decodedStr = decodeURIComponent(escape(window.atob(response.content.replace(/\n/g, ""))));
-                    var remoteData = JSON.parse(decodedStr);
+                    // API 返回的是 release 对象，提取 tag_name (例如 "v1.0.8" 或 "1.0.8")
+                    var remoteData = JSON.parse(xhr.responseText);
+                    var remoteVer = remoteData.tag_name ? remoteData.tag_name.replace("v", "") : null;
+
+                    if(!remoteVer) throw new Error("无法获取 tag_name");
 
                     var botEl = document.getElementById("verDisplay");
                     var localVersion = botEl ? botEl.innerText.replace("v", "") : "1.0.0";
                     if (localVersion === "-") localVersion = "1.0.0";
 
-                    if (isManual) logMsg("云端版本: " + remoteData.version + " | 本地版本: " + localVersion);
+                    if (isManual) logMsg("云端版本: " + remoteVer + " | 本地版本: " + localVersion);
 
                     var btnForce = document.getElementById("btnForceCheckUpdate");
-                    if (remoteData.version && remoteData.version !== localVersion) {
+                    if (remoteVer && remoteVer !== localVersion) {
                         if (btnForce) {
-                            btnForce.innerText = "🎉 发现新版本 v" + remoteData.version + "！点击顶部横幅更新";
+                            btnForce.innerText = "🎉 发现新版本 v" + remoteVer + "！点击顶部横幅更新";
                             btnForce.style.background = "#4CAF50";
                             btnForce.style.color = "#fff";
                         }
-                        showUpdateBanner(remoteData.version, zipDownloadUrl, repoName, branch);
-                        setStatus("发现新版本 v" + remoteData.version + "，请点击顶部横幅更新", "");
+                        showUpdateBanner(remoteVer, zipDownloadUrl, repoName, branch);
+                        setStatus("发现新版本 v" + remoteVer + "，请点击顶部横幅更新", "");
                     } else {
                         if (isManual) {
                             setStatus("当前已经是最新版本 (" + localVersion + ")，无需更新。", "");
@@ -131,7 +132,7 @@ function checkAutoUpdate(isManual) {
     };
 
     xhr.onerror = function() {
-        if (isManual) logMsg("热更请求遭遇网络异常或跨域拦截");
+        if (isManual) logMsg("热更请求遭遇网络异常 (可能需要开启代理)");
         resetBtnForce();
     };
 
@@ -146,7 +147,7 @@ function checkAutoUpdate(isManual) {
         var btnForce = document.getElementById("btnForceCheckUpdate");
         if (btnForce) {
             btnForce.disabled = false;
-            btnForce.innerText = "❌ 检测失败，请检查网络或代理";
+            btnForce.innerText = "❌ 检测失败，请检查网络";
             btnForce.style.background = "#F44336";
             btnForce.style.color = "#fff";
         }
@@ -162,48 +163,166 @@ function showUpdateBanner(newVersion, zipUrl, repoName, branch) {
     document.getElementById("newVersionText").innerText = newVersion;
 
     banner.onclick = function() {
-        banner.innerText = "⏳ 正在静默下载并覆盖更新，请稍候...";
+        banner.innerText = "⏳ 初始化更新引擎中...";
         banner.style.pointerEvents = "none";
         banner.style.background = "#FFC107";
 
         var localExtPath = csInterface.getSystemPath(SystemPath.EXTENSION);
+        var userDataPath = csInterface.getSystemPath(SystemPath.USER_DATA);
 
-        // 构建强力的提权 PowerShell 脚本：下载 -> 解压 -> 提权运行 cmd 执行 xcopy 强行覆盖
+        // 状态文件存放在用户目录，以解决 Program Files 无写入权限的问题
+        var statusFile = userDataPath + "/uilink_update_status.txt";
+        var tmpZip = "$env:TEMP\\uilink_update.zip";
+        var tmpDir = "$env:TEMP\\uilink_update_dir";
+
+        // 构建带有详细进度输出的 PowerShell 脚本
+        // 注意：将多行合并，并处理好双引号和单引号的转义，确保 PowerShell 引擎能够顺畅执行
         var psScript =
+            "$statusFile = '" + statusFile + "'; " +
+            "Set-Content -Path $statusFile -Value '【1/3】正在飞速下载更新包...'; " +
             "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; " +
-            "$tmpZip = Join-Path $env:TEMP 'uilink_update.zip'; " +
-            "$tmpDir = Join-Path $env:TEMP 'uilink_update_dir'; " +
-            "Invoke-WebRequest -Uri '" + zipUrl + "' -OutFile $tmpZip; " +
-            "if(Test-Path $tmpDir) { Remove-Item -Recurse -Force $tmpDir }; " +
-            "Expand-Archive -Path $tmpZip -DestinationPath $tmpDir -Force; " +
-            "$src = Join-Path $tmpDir '" + repoName + "-" + branch + "\\*'; " +
+            "$ProgressPreference = 'SilentlyContinue'; " +
+            "Invoke-WebRequest -Uri '" + zipUrl + "' -OutFile '" + tmpZip + "'; " +
+            "Set-Content -Path $statusFile -Value '【2/3】正在解压文件...'; " +
+            "if(Test-Path '" + tmpDir + "') { Remove-Item -Recurse -Force '" + tmpDir + "' }; " +
+            "Expand-Archive -Path '" + tmpZip + "' -DestinationPath '" + tmpDir + "' -Force; " +
+            "Set-Content -Path $statusFile -Value '【3/3】准备覆盖文件(如弹出权限框请点“是”)...'; " +
+            "$src = Join-Path '" + tmpDir + "' '" + repoName + "-" + branch + "\\*'; " +
             "$dest = '" + localExtPath + "\\'; " +
-            "$argList = '/c xcopy \"' + $src + '\" \"' + $dest + '\" /s /e /y /c /h'; " +
-            "Start-Process cmd -ArgumentList $argList -Verb RunAs -WindowStyle Hidden -Wait;";
+            // 因为 Start-Process 带有 -Verb RunAs 是以独立窗口拉起的管理员进程，
+            // 加上 -Wait 会导致主 PowerShell 脚本一直挂起死锁，所以要去掉 -Wait
+            "$argList = '/c \"xcopy \"\"' + $src + '\"\" \"\"' + $dest + '\"\" /s /e /y /c /h & echo SUCCESS > \"\"' + $statusFile + '\"\"\"'; " +
+            "Start-Process cmd.exe -ArgumentList $argList -Verb RunAs -WindowStyle Hidden;";
 
         if (window.cep && window.cep.process && typeof window.cep.process.createProcess === 'function') {
-            logMsg("尝试执行带提权的 PowerShell 热更...");
-            window.cep.process.createProcess("powershell.exe", "-Command", psScript);
+            logMsg("启动 PowerShell 并开启进度监听...");
+            // 修改这里：增加 -NoProfile 参数，加快启动速度，并且只执行一次
+            window.cep.process.createProcess("powershell.exe", "-NoProfile", "-Command", psScript);
 
-            // 如果路径在 Program Files，说明弹出了 UAC，需要给用户更多时间点击“是”
-            var waitTime = localExtPath.indexOf("Program Files") !== -1 ? 8000 : 5000;
-            if (localExtPath.indexOf("Program Files") !== -1) {
-                banner.innerText = "🛡️ 请在弹出的【管理员权限】窗口点“是”...";
-            }
+            var checkCount = 0;
+            var lastProgressTxt = "";
+            // 每 1000ms 读取一次 statusFile 来刷新界面进度
+            var checkInterval = setInterval(function() {
+                checkCount++;
+                var result = window.cep.fs.readFile(statusFile);
+                if (result.err === window.cep.fs.NO_ERROR) {
+                    var txt = result.data.trim();
+                    if (txt.indexOf("SUCCESS") !== -1) {
+                        clearInterval(checkInterval);
+                        banner.innerText = "✅ 更新完成！正在重载面板...";
+                        banner.style.background = "#4CAF50";
 
+                        // 清理状态文件 (防止卡死)
+                        window.cep.fs.deleteFile(statusFile);
+
+                        setTimeout(function() { window.location.reload(true); }, 1500);
+                    } else if (txt && txt !== lastProgressTxt) {
+                        banner.innerText = "⏳ " + txt;
+                        logMsg("进度: " + txt);
+                        lastProgressTxt = txt;
+                    }
+                } else {
+                    if (checkCount % 2 === 0) { // 每2秒打一次日志防刷屏
+                        logMsg("等待状态文件生成中...");
+                    }
+                }
+            }, 1000);
+
+            // 超时保底机制 (45秒)
             setTimeout(function() {
-                banner.innerText = "✅ 更新指令已完成！正在重载面板...";
-                banner.style.background = "#4CAF50";
-                setTimeout(function() { window.location.reload(true); }, 2000);
-            }, waitTime);
+                clearInterval(checkInterval);
+                if (banner.innerText.indexOf("✅") === -1) {
+                    banner.innerText = "⚠️ 更新可能还在后台进行或被 UAC 拦截，请稍后手动重启 PS";
+                    banner.style.background = "#FF9800";
+                    banner.style.pointerEvents = "auto";
+                }
+            }, 45000);
+
         } else {
-            banner.innerText = "❌ 你的 PS 环境不支持静默更新，请手动下载！";
-            banner.style.background = "#F44336";
-            setTimeout(function() {
-                window.cep.util.openURLInDefaultBrowser("https://github.com/" + githubOwner_global + "/" + repoName + "/releases");
-            }, 1500);
+            // 兜底方案：使用 XMLHttpRequest 下载 zip
+            logMsg("尝试使用 XMLHttpRequest 下载...");
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", zipUrl, true);
+            xhr.responseType = "arraybuffer"; // 使用 arraybuffer 处理二进制文件
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    banner.innerText = "⏳ 正在解压并覆盖文件...";
+                    logMsg("下载完成，写入文件...");
+
+                    var result = window.cep.fs.writeFile(tmpZip, xhr.response);
+                    if (result === window.cep.fs.NO_ERROR) {
+                        // 依然需要 PowerShell 来解压，但只需简单的解压命令
+                        var psExtract = "Expand-Archive -Path '" + tmpZip + "' -DestinationPath '" + tmpDir + "' -Force; " +
+                                        "$src = Join-Path '" + tmpDir + "' '" + repoName + "-" + branch + "\\*'; " +
+                                        "$dest = '" + localExtPath + "\\'; " +
+                                        "$argList = '/c \"xcopy \"\"' + $src + '\"\" \"\"' + $dest + '\"\" /s /e /y /c /h & echo SUCCESS > \"\"' + statusFile + '\"\"\"'; " +
+                                        "Start-Process cmd.exe -ArgumentList $argList -Verb RunAs -WindowStyle Hidden;";
+                        window.cep.process.createProcess("powershell.exe", "-NoProfile", "-Command", psExtract);
+
+                        // 开始同样的轮询
+                        startStatusPolling(banner, statusFile, checkInterval, checkCount, lastProgressTxt);
+                    } else {
+                        logMsg("写入临时压缩包失败：" + result);
+                        showManualDownload(banner);
+                    }
+                } else {
+                     logMsg("XHR 下载失败：" + xhr.status);
+                     showManualDownload(banner);
+                }
+            };
+            xhr.onerror = function() {
+                logMsg("XHR 下载发生网络错误。");
+                showManualDownload(banner);
+            }
+            xhr.send();
         }
     };
+}
+
+function startStatusPolling(banner, statusFile, checkInterval, checkCount, lastProgressTxt) {
+    checkInterval = setInterval(function() {
+        checkCount++;
+        var result = window.cep.fs.readFile(statusFile);
+        if (result.err === window.cep.fs.NO_ERROR) {
+            var txt = result.data.trim();
+            if (txt.indexOf("SUCCESS") !== -1) {
+                clearInterval(checkInterval);
+                banner.innerText = "✅ 更新完成！正在重载面板...";
+                banner.style.background = "#4CAF50";
+
+                // 清理状态文件 (防止卡死)
+                window.cep.fs.deleteFile(statusFile);
+
+                setTimeout(function() { window.location.reload(true); }, 1500);
+            } else if (txt && txt !== lastProgressTxt) {
+                banner.innerText = "⏳ " + txt;
+                logMsg("进度: " + txt);
+                lastProgressTxt = txt;
+            }
+        } else {
+            if (checkCount % 2 === 0) { // 每2秒打一次日志防刷屏
+                logMsg("等待状态文件生成中...");
+            }
+        }
+    }, 1000);
+
+    // 超时保底机制 (45秒)
+    setTimeout(function() {
+        clearInterval(checkInterval);
+        if (banner.innerText.indexOf("✅") === -1) {
+            banner.innerText = "⚠️ 更新可能还在后台进行或被 UAC 拦截，请稍后手动重启 PS";
+            banner.style.background = "#FF9800";
+            banner.style.pointerEvents = "auto";
+        }
+    }, 45000);
+}
+
+function showManualDownload(banner) {
+     banner.innerText = "❌ 你的 PS 环境不支持静默更新，请手动下载！";
+     banner.style.background = "#F44336";
+     setTimeout(function() {
+         window.cep.util.openURLInDefaultBrowser("https://github.com/" + githubOwner_global + "/PS-Tool/releases");
+     }, 1500);
 }
 
 document.addEventListener("DOMContentLoaded", function() {
