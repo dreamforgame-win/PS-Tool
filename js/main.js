@@ -62,7 +62,7 @@ function loadLocalVersionDisplay() {
 }
 
 // ==========================================
-// Github 热更新逻辑 (跨域加强版 XHR)
+// Github 热更新逻辑 (GitHub API + 管理员提权)
 // ==========================================
 var githubOwner_global = "dreamforgame-win";
 
@@ -71,23 +71,27 @@ function checkAutoUpdate(isManual) {
     var repoName = "PS-Tool";
     var branch = "main";
 
-    // 使用 jsdelivr CDN 作为反向代理，彻底解决纯前端访问 GitHub Raw 的跨域/被墙问题
-    var cdnUrl = "https://cdn.jsdelivr.net/gh/" + githubOwner + "/" + repoName + "@" + branch + "/version.json?t=" + new Date().getTime();
+    // 使用 GitHub API 直接读取内容，彻底绕过 CDN 的顽固缓存
+    var apiUrl = "https://api.github.com/repos/" + githubOwner + "/" + repoName + "/contents/version.json?ref=" + branch + "&t=" + new Date().getTime();
     var zipDownloadUrl = "https://github.com/" + githubOwner + "/" + repoName + "/archive/refs/heads/" + branch + ".zip";
 
-    if (isManual) logMsg("开始通过 CDN 请求远端版本号...");
+    if (isManual) logMsg("开始通过 GitHub API 请求远端版本号...");
 
     var xhr = new XMLHttpRequest();
     xhr.overrideMimeType("application/json");
-    // 强制允许跨域
     xhr.withCredentials = false;
-    xhr.open("GET", cdnUrl, true);
+    xhr.open("GET", apiUrl, true);
 
     xhr.onreadystatechange = function() {
         if (xhr.readyState === 4) {
             if (xhr.status === 200) {
                 try {
-                    var remoteData = JSON.parse(xhr.responseText);
+                    var response = JSON.parse(xhr.responseText);
+                    // GitHub API 返回的是 base64 编码的文件内容，需要解码
+                    // 使用 escape + decodeURIComponent 解决中文乱码和特殊字符问题
+                    var decodedStr = decodeURIComponent(escape(window.atob(response.content.replace(/\n/g, ""))));
+                    var remoteData = JSON.parse(decodedStr);
+
                     var botEl = document.getElementById("verDisplay");
                     var localVersion = botEl ? botEl.innerText.replace("v", "") : "1.0.0";
                     if (localVersion === "-") localVersion = "1.0.0";
@@ -97,7 +101,7 @@ function checkAutoUpdate(isManual) {
                     var btnForce = document.getElementById("btnForceCheckUpdate");
                     if (remoteData.version && remoteData.version !== localVersion) {
                         if (btnForce) {
-                            btnForce.innerText = "🎉 发现新版本！点击顶部横幅更新";
+                            btnForce.innerText = "🎉 发现新版本 v" + remoteData.version + "！点击顶部横幅更新";
                             btnForce.style.background = "#4CAF50";
                             btnForce.style.color = "#fff";
                         }
@@ -163,26 +167,35 @@ function showUpdateBanner(newVersion, zipUrl, repoName, branch) {
         banner.style.background = "#FFC107";
 
         var localExtPath = csInterface.getSystemPath(SystemPath.EXTENSION);
-        var tmpZip = "$env:TEMP\\uilink_update.zip";
-        var tmpDir = "$env:TEMP\\uilink_update_dir";
 
+        // 构建强力的提权 PowerShell 脚本：下载 -> 解压 -> 提权运行 cmd 执行 xcopy 强行覆盖
         var psScript =
             "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; " +
-            "Invoke-WebRequest -Uri '" + zipUrl + "' -OutFile " + tmpZip + "; " +
-            "if(Test-Path " + tmpDir + ") { Remove-Item -Recurse -Force " + tmpDir + " }; " +
-            "Expand-Archive -Path " + tmpZip + " -DestinationPath " + tmpDir + " -Force; " +
-            "xcopy '" + tmpDir + "\\" + repoName + "-" + branch + "\\*' '" + localExtPath + "\\' /s /e /y /c /h; ";
+            "$tmpZip = Join-Path $env:TEMP 'uilink_update.zip'; " +
+            "$tmpDir = Join-Path $env:TEMP 'uilink_update_dir'; " +
+            "Invoke-WebRequest -Uri '" + zipUrl + "' -OutFile $tmpZip; " +
+            "if(Test-Path $tmpDir) { Remove-Item -Recurse -Force $tmpDir }; " +
+            "Expand-Archive -Path $tmpZip -DestinationPath $tmpDir -Force; " +
+            "$src = Join-Path $tmpDir '" + repoName + "-" + branch + "\\*'; " +
+            "$dest = '" + localExtPath + "\\'; " +
+            "$argList = '/c xcopy \"' + $src + '\" \"' + $dest + '\" /s /e /y /c /h'; " +
+            "Start-Process cmd -ArgumentList $argList -Verb RunAs -WindowStyle Hidden -Wait;";
 
         if (window.cep && window.cep.process && typeof window.cep.process.createProcess === 'function') {
-            logMsg("尝试使用 cep.process 执行 PowerShell 热更...");
+            logMsg("尝试执行带提权的 PowerShell 热更...");
             window.cep.process.createProcess("powershell.exe", "-Command", psScript);
 
-            // 粗暴延迟 5 秒后强制重载面板
+            // 如果路径在 Program Files，说明弹出了 UAC，需要给用户更多时间点击“是”
+            var waitTime = localExtPath.indexOf("Program Files") !== -1 ? 8000 : 5000;
+            if (localExtPath.indexOf("Program Files") !== -1) {
+                banner.innerText = "🛡️ 请在弹出的【管理员权限】窗口点“是”...";
+            }
+
             setTimeout(function() {
-                banner.innerText = "✅ 更新指令已发送！正在重载面板...";
+                banner.innerText = "✅ 更新指令已完成！正在重载面板...";
                 banner.style.background = "#4CAF50";
-                setTimeout(function() { window.location.reload(true); }, 1500);
-            }, 5000);
+                setTimeout(function() { window.location.reload(true); }, 2000);
+            }, waitTime);
         } else {
             banner.innerText = "❌ 你的 PS 环境不支持静默更新，请手动下载！";
             banner.style.background = "#F44336";
