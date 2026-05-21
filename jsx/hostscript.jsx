@@ -45,12 +45,132 @@ if (typeof JSON !== "object") { JSON = {}; }
     }
 }());
 
-var cachedDocData = null; 
+var cachedDocData = null;
 var outputFolder = null;
 var imagesFolder = null;
 var exportedImagesCount = 0;
 var totalLayersCount = 0;
 var currentOptions = { includeHidden: false, refWidth: 1920, refHeight: 1080 };
+
+// ==========================================================
+// 0.5 图层元数据存储引擎 (基于 Document Custom Options)
+// 数据持久化在 PSD 文件内部，不产生额外文件，不影响图层名
+// ==========================================================
+var UILINK_META_KEY = "UILinkLayerMeta"; // Custom Options 命名空间
+
+/**
+ * 获取当前文档的所有图层元数据映射表
+ * 返回格式: { "layerId": { outputType, compType, width, height, sliceSuffix, isExport, moduleName, baseName }, ... }
+ */
+function _getDocMetaMap() {
+    try {
+        var desc = app.getCustomOptions(UILINK_META_KEY);
+        var jsonStr = desc.getString(stringIDToTypeID("json"));
+        return JSON.parse(jsonStr);
+    } catch(e) {
+        // 不存在或解析失败，返回空映射
+        return {};
+    }
+}
+
+/**
+ * 将完整的元数据映射表写回文档
+ */
+function _saveDocMetaMap(map) {
+    var desc = new ActionDescriptor();
+    desc.putString(stringIDToTypeID("json"), JSON.stringify(map));
+    app.putCustomOptions(UILINK_META_KEY, desc, true); // true = persistent (随 PSD 保存)
+}
+
+/**
+ * 读取指定图层的元数据
+ * @param {number} layerId - 图层唯一 ID
+ * @returns {object|null} 元数据对象，不存在则返回 null
+ */
+function getLayerMeta(layerId) {
+    var map = _getDocMetaMap();
+    return map[String(layerId)] || null;
+}
+
+/**
+ * 写入指定图层的元数据
+ * @param {number} layerId - 图层唯一 ID
+ * @param {object} meta - 元数据对象 { outputType, compType, width, height, sliceSuffix, isExport, moduleName, baseName }
+ */
+function setLayerMeta(layerId, meta) {
+    var map = _getDocMetaMap();
+    map[String(layerId)] = meta;
+    _saveDocMetaMap(map);
+}
+
+/**
+ * 删除指定图层的元数据（图层被删除时调用）
+ */
+function removeLayerMeta(layerId) {
+    var map = _getDocMetaMap();
+    delete map[String(layerId)];
+    _saveDocMetaMap(map);
+}
+
+/**
+ * 从图层获取完整的元数据（优先读隐藏属性，兼容旧版从图层名读取）
+ * 这是对外的统一接口，自动处理新旧格式兼容
+ */
+function getLayerMetaWithFallback(layer) {
+    // 1. 先尝试从隐藏属性读取
+    var meta = getLayerMeta(layer.id);
+    if (meta) return meta;
+
+    // 2. 兼容旧格式：从图层名中解析（| 分隔格式）
+    var name = layer.name;
+    var parts = name.split("|");
+    if (parts.length >= 6) {
+        var nameParts = parts[0].split("_");
+        var moduleName = nameParts[0];
+        var baseName = nameParts.slice(1).join("_");
+        var outputType = parts[1];
+        var compType = parts[2];
+        var sizeParts = parts[3].split("x");
+        var width = parseInt(sizeParts[0]) || 0;
+        var height = parseInt(sizeParts[1]) || 0;
+        var sliceSuffix = parts[4];
+        var isExport = (parts[5] === "1");
+
+        meta = {
+            moduleName: moduleName,
+            baseName: baseName,
+            outputType: outputType,
+            compType: compType,
+            width: width,
+            height: height,
+            sliceSuffix: sliceSuffix,
+            isExport: isExport
+        };
+        return meta;
+    }
+
+    // 3. 完全未标记的图层，返回 null
+    return null;
+}
+
+/**
+ * 根据元数据生成导出文件名（图层显示名）
+ * 这个名字将同时作为图层名和导出文件名的基础
+ */
+function buildExportName(meta) {
+    if (!meta) return null;
+    var baseName = meta.baseName || "unnamed";
+
+    if (meta.outputType.indexOf("texture") === 0) {
+        return "tex_" + baseName;
+    } else {
+        var prefix = "common";
+        if (meta.outputType.indexOf("atlas:") === 0) {
+            prefix = meta.outputType.split(":")[1] || "common";
+        }
+        return prefix + "@" + baseName;
+    }
+}
 
 // ==========================================================
 // 1. 图层信息获取与重命名逻辑 (模块化)
@@ -68,7 +188,7 @@ function getActiveLayerInfo() {
 
         var docName = doc.name.split(".")[0];
         var name = layer.name;
-        
+
         var realW = 0, realH = 0;
         try {
             var bounds = layer.bounds;
@@ -79,7 +199,9 @@ function getActiveLayerInfo() {
         // 恢复原始单位
         app.preferences.rulerUnits = oldUnit;
 
-        // 解析命名规则
+        // 优先从隐藏属性读取元数据
+        var meta = getLayerMetaWithFallback(layer);
+
         var info = {
             docName: docName,
             fullName: name,
@@ -92,33 +214,28 @@ function getActiveLayerInfo() {
             sliceSuffix: "0,0,0,0",
             outputType: "atlas",
             compType: "image",
-            isExport: false
+            isExport: false,
+            hasMeta: false // 标记是否已有元数据（用于前端判断是否为已配置图层）
         };
 
-        var parts = name.split("|");
-        if (parts.length >= 6) {
-            var nameParts = parts[0].split("_");
-            info.moduleName = nameParts[0];
-            info.baseName = nameParts.slice(1).join("_");
-            info.outputType = parts[1];
-            info.compType = parts[2];
-            var sizeParts = parts[3].split("x");
-            if (sizeParts.length === 2) {
-                info.width = parseInt(sizeParts[0]) || 0;
-                info.height = parseInt(sizeParts[1]) || 0;
-            }
-            info.sliceSuffix = parts[4];
-            info.isExport = (parts[5] === "1");
+        if (meta) {
+            info.moduleName = meta.moduleName || docName;
+            info.baseName = meta.baseName || name;
+            info.outputType = meta.outputType || "atlas";
+            info.compType = meta.compType || "image";
+            info.width = meta.width || 0;
+            info.height = meta.height || 0;
+            info.sliceSuffix = meta.sliceSuffix || "0,0,0,0";
+            info.isExport = !!meta.isExport;
+            info.hasMeta = true;
         } else {
-            // [智能读取规则] 针对非元数据图层的解析
+            // [智能读取规则] 针对无元数据图层的命名推测
             if (name.indexOf("@") !== -1) {
-                // 图集模式: prefix@basename
                 var atParts = name.split("@");
                 info.outputType = "atlas:" + atParts[0];
                 info.baseName = atParts[1];
                 info.compType = "image";
             } else if (name.indexOf("tex_") === 0) {
-                // 大图模式: tex_basename
                 info.outputType = "texture";
                 info.baseName = name.substring(4);
                 info.compType = "texture";
@@ -127,8 +244,8 @@ function getActiveLayerInfo() {
             }
         }
 
-        // 手动构建简单的 JSON，规避 Polyfill 风险
-        return "{" + 
+        // 手动构建 JSON
+        return "{" +
             "\"docName\":\"" + info.docName + "\"," +
             "\"fullName\":\"" + info.fullName.replace(/\\/g,"\\\\").replace(/\"/g,"\\\"") + "\"," +
             "\"moduleName\":\"" + info.moduleName + "\"," +
@@ -140,7 +257,8 @@ function getActiveLayerInfo() {
             "\"sliceSuffix\":\"" + info.sliceSuffix + "\"," +
             "\"outputType\":\"" + info.outputType + "\"," +
             "\"compType\":\"" + info.compType + "\"," +
-            "\"isExport\":" + info.isExport + 
+            "\"isExport\":" + info.isExport + "," +
+            "\"hasMeta\":" + info.hasMeta +
         "}";
     } catch(e) { return "ERROR: " + e.toString(); }
 }
@@ -152,37 +270,52 @@ function applyLayerRename(infoStr) {
         var layer = doc.activeLayer;
         if (!layer) return "ERROR: 未选中图层";
 
-        // 拼接新命名
-        var rootBase = info.moduleName + "_" + info.baseName;
-        var sizeStr = (info.width || 0) + "x" + (info.height || 0);
-        var sliceStr = info.sliceSuffix || "0,0,0,0";
-        var exportStr = info.isExport ? "1" : "0";
-        var newName = rootBase + "|" + info.outputType + "|" + info.compType + "|" + sizeStr + "|" + sliceStr + "|" + exportStr;
+        // 构建元数据对象
+        var meta = {
+            moduleName: info.moduleName || "",
+            baseName: info.baseName || "",
+            outputType: info.outputType || "atlas",
+            compType: info.compType || "image",
+            width: info.width || 0,
+            height: info.height || 0,
+            sliceSuffix: info.sliceSuffix || "0,0,0,0",
+            isExport: !!info.isExport
+        };
 
-        // 【核心修复】查重校验
-        var checkResult = checkDuplicateExportNames(layer.id, newName);
+        // 生成导出文件名（同时作为图层显示名）
+        var exportName = buildExportName(meta);
+        if (!exportName) return "ERROR: 无法生成导出文件名";
+
+        // 【核心修复】查重校验 —— 使用新系统
+        var checkResult = checkDuplicateExportNamesNew(layer.id, exportName, meta.isExport);
         if (checkResult !== "OK") {
             return "ERROR: " + checkResult;
         }
 
-        layer.name = newName;
-        return newName;
+        // 1. 将元数据写入隐藏属性
+        setLayerMeta(layer.id, meta);
+
+        // 2. 图层名只设置为干净的导出名
+        layer.name = exportName;
+
+        return exportName;
     } catch(e) { return "ERROR: " + e.toString(); }
 }
 
 // ==========================================
-// 辅助：查重子逻辑
+// 辅助：查重子逻辑（新版，基于隐藏属性）
 // ==========================================
 function getExportFileName(layerName) {
+    // 兼容旧版命名格式的查重
     var parts = layerName.split("|");
     if (parts.length < 6) return null;
-    if (parts[5] === "0") return null; 
+    if (parts[5] === "0") return null;
 
     var outputTypeStr = parts[1];
     var baseParts = parts[0].split("_");
     if (baseParts.length < 2) return null;
     var baseName = baseParts.slice(1).join("_");
-    
+
     if (outputTypeStr.indexOf("texture") === 0) {
         return "tex_" + baseName + ".png";
     } else {
@@ -195,11 +328,69 @@ function getExportFileName(layerName) {
     }
 }
 
+/**
+ * 新版查重：基于元数据系统检查导出文件名是否冲突
+ */
+function checkDuplicateExportNamesNew(activeLayerId, proposedExportName, isExport) {
+    if (!isExport) return "OK"; // 不导出则不需要查重
+
+    var doc = app.activeDocument;
+    var metaMap = _getDocMetaMap();
+    var nameMap = {};
+
+    // 检查所有已有元数据的图层
+    for (var id in metaMap) {
+        if (!metaMap.hasOwnProperty(id)) continue;
+        if (parseInt(id) === activeLayerId) continue; // 跳过当前图层
+
+        var m = metaMap[id];
+        if (!m.isExport) continue;
+
+        var eName = buildExportName(m);
+        if (eName) {
+            var fullName = eName + ".png";
+            if (nameMap[fullName]) {
+                // 已有冲突，但这不是当前操作导致的
+            }
+            nameMap[fullName] = "ID:" + id;
+        }
+    }
+
+    // 同时兼容旧格式图层的查重
+    var layers = [];
+    function getAllLayers(parent) {
+        for (var i = 0; i < parent.layers.length; i++) {
+            var l = parent.layers[i];
+            if (l.typename === "LayerSet") getAllLayers(l);
+            else layers.push(l);
+        }
+    }
+    getAllLayers(doc);
+
+    for (var i = 0; i < layers.length; i++) {
+        var l = layers[i];
+        if (l.id === activeLayerId) continue;
+        // 只检查没有新元数据但有旧格式命名的图层
+        if (metaMap[String(l.id)]) continue; // 已在上面检查过
+        var oldExportName = getExportFileName(l.name);
+        if (oldExportName) {
+            nameMap[oldExportName] = l.name;
+        }
+    }
+
+    // 检查当前提议的名字是否冲突
+    var proposedFull = proposedExportName + ".png";
+    if (nameMap[proposedFull]) {
+        return "导出文件名 [" + proposedFull + "] 冲突！冲突图层: [" + nameMap[proposedFull] + "]";
+    }
+    return "OK";
+}
+
 function checkDuplicateExportNames(activeLayerId, proposedName) {
     var doc = app.activeDocument;
     var nameMap = {};
     var layers = [];
-    
+
     function getAllLayers(parent) {
         for (var i = 0; i < parent.layers.length; i++) {
             var l = parent.layers[i];
@@ -213,7 +404,7 @@ function checkDuplicateExportNames(activeLayerId, proposedName) {
         var l = layers[i];
         var lName = (l.id === activeLayerId) ? proposedName : l.name;
         var exportName = getExportFileName(lName);
-        
+
         if (exportName) {
             if (nameMap[exportName]) {
                 return "导出文件名 [" + exportName + "] 冲突！冲突图层: [" + nameMap[exportName] + "]";
@@ -230,19 +421,26 @@ function exportLayerImage(layer, fileName) {
     var success = false;
     var tempDoc = null;
     try {
-        // 1. 解析命名元数据
-        var nameParts = layer.name.split("|");
+        // 1. 从隐藏属性读取元数据（兼容旧格式）
+        var meta = getLayerMetaWithFallback(layer);
         var forceW = 0, forceH = 0;
         var outputType = "atlas";
-        var baseName = layer.name.split("@")[0];
+        var baseName = layer.name;
 
-        if (nameParts.length >= 6) {
-            outputType = nameParts[1];
-            var sizeParts = nameParts[3].split("x");
-            forceW = parseInt(sizeParts[0]) || 0;
-            forceH = parseInt(sizeParts[1]) || 0;
-            var rootParts = nameParts[0].split("_");
-            baseName = rootParts.slice(1).join("_");
+        if (meta) {
+            outputType = meta.outputType || "atlas";
+            forceW = meta.width || 0;
+            forceH = meta.height || 0;
+            baseName = meta.baseName || layer.name;
+        } else {
+            // 最终兜底：从图层名推测
+            if (layer.name.indexOf("@") !== -1) {
+                baseName = layer.name.split("@")[1] || layer.name;
+                outputType = "atlas:" + layer.name.split("@")[0];
+            } else if (layer.name.indexOf("tex_") === 0) {
+                baseName = layer.name.substring(4);
+                outputType = "texture";
+            }
         }
 
         // 2. 确定最终文件名
@@ -286,8 +484,9 @@ function exportLayerImage(layer, fileName) {
         var w = tempDoc.width.as("px");
         var h = tempDoc.height.as("px");
 
-        // 4. 九宫格挤压裁剪
-        var sliceParts = (nameParts.length >= 6) ? nameParts[4].split(",") : [];
+        // 4. 九宫格挤压裁剪（从元数据读取）
+        var sliceStr = meta ? (meta.sliceSuffix || "0,0,0,0") : "0,0,0,0";
+        var sliceParts = sliceStr.split(",");
         if (sliceParts.length === 4) {
             var st = parseInt(sliceParts[0]) || 0;
             var sb = parseInt(sliceParts[1]) || 0;
@@ -475,15 +674,21 @@ function scanChanges(payloadStr) {
             var status = "new";
             var ol = oldLayersMap[id];
 
-            // 检查导出标志位 (元数据的第 6 位)
-            var nameParts = nl.fullName ? nl.fullName.split("|") : [];
-            
-            // [新增判断] 如果命名规则不符合预设的 6 段式元数据，说明没有经过属性面板标准化，直接跳过（默认为不导出）
-            if (nameParts.length < 6) continue;
+            // 从隐藏属性检查导出标志位（兼容旧格式）
+            var layerMeta = getLayerMeta(parseInt(id));
+            var hasOldFormat = nl.fullName ? (nl.fullName.split("|").length >= 6) : false;
 
-            var exportFlag = nameParts[5];
+            // 判断是否有元数据（新系统或旧命名格式均可）
+            if (!layerMeta && !hasOldFormat) continue; // 无元数据，跳过
 
-            if (exportFlag === "0") {
+            var isExportEnabled = false;
+            if (layerMeta) {
+                isExportEnabled = !!layerMeta.isExport;
+            } else if (hasOldFormat) {
+                isExportEnabled = (nl.fullName.split("|")[5] === "1");
+            }
+
+            if (!isExportEnabled) {
                 status = "disabled"; // 用户主动关闭导出
             } else if (ol) {
                 // 精确对比：图层名、边界尺寸
@@ -551,9 +756,15 @@ function exportSelectedLayers(payloadStr) {
             var targetId = parseInt(selectedIds[i], 10);
             var realLayer = findLayerById(doc, targetId);
             if (realLayer) {
-                // 二次校验导出标志位
-                var nameParts = realLayer.name.split("|");
-                var exportFlag = (nameParts.length >= 6) ? nameParts[5] : "1";
+                // 二次校验导出标志位（优先从隐藏属性读取）
+                var layerMeta = getLayerMetaWithFallback(realLayer);
+                var exportFlag = "0";
+                if (layerMeta) {
+                    exportFlag = layerMeta.isExport ? "1" : "0";
+                } else {
+                    var nameParts = realLayer.name.split("|");
+                    exportFlag = (nameParts.length >= 6) ? nameParts[5] : "1";
+                }
                 
                 if (exportFlag === "1") {
                     realLayer.visible = true;
@@ -610,8 +821,15 @@ function convertToScalable9Slice() {
         var doc = app.activeDocument;
         var layer = doc.activeLayer;
 
-        var nameParts = layer.name.split("|");
-        var sliceParams = (nameParts.length >= 6) ? nameParts[4] : "";
+        // 从隐藏属性读取九宫格参数（兼容旧格式）
+        var meta = getLayerMetaWithFallback(layer);
+        var sliceParams = "";
+        if (meta) {
+            sliceParams = meta.sliceSuffix || "";
+        } else {
+            var nameParts = layer.name.split("|");
+            sliceParams = (nameParts.length >= 6) ? nameParts[4] : "";
+        }
         if (!sliceParams || sliceParams === "0,0,0,0") {
             return "ERROR: 图层必须先设置并应用九宫格参数（非 0,0,0,0）";
         }
@@ -705,8 +923,15 @@ function restoreScaled9Slice() {
         var doc = app.activeDocument;
         var layer = doc.activeLayer;
 
-        var nameParts = layer.name.split("|");
-        var sliceParams = (nameParts.length >= 6) ? nameParts[4] : "";
+        // 从隐藏属性读取九宫格参数（兼容旧格式）
+        var meta = getLayerMetaWithFallback(layer);
+        var sliceParams = "";
+        if (meta) {
+            sliceParams = meta.sliceSuffix || "";
+        } else {
+            var nameParts = layer.name.split("|");
+            sliceParams = (nameParts.length >= 6) ? nameParts[4] : "";
+        }
         var parts = sliceParams.split(",");
         var t = parseInt(parts[0], 10) || 0;
         var b = parseInt(parts[1], 10) || 0;
@@ -714,7 +939,7 @@ function restoreScaled9Slice() {
         var r = parseInt(parts[3], 10) || 0;
 
         if (t === 0 && b === 0 && l === 0 && r === 0) {
-            return "ERROR: 未检测到有效的九宫格参数（不能全为 0）。请先应用九宫格并在图层名中包含切片参数。";
+            return "ERROR: 未检测到有效的九宫格参数（不能全为 0）。请先在属性面板中设置九宫格参数。";
         }
 
         var oldRulerUnits = app.preferences.rulerUnits;
@@ -882,28 +1107,55 @@ function applyNineSliceCrop(top, bottom, left, right) {
     try {
         var doc = app.activeDocument;
         var layer = doc.activeLayer;
-        var name = layer.name;
-        var parts = name.split("|");
         var sliceStr = top + "," + bottom + "," + left + "," + right;
 
+        // 优先更新隐藏属性中的九宫格参数
+        var meta = getLayerMeta(layer.id);
+        if (meta) {
+            meta.sliceSuffix = sliceStr;
+            setLayerMeta(layer.id, meta);
+            return layer.name; // 图层名不变，返回当前名称
+        }
+
+        // 兼容旧格式：如果还没迁移到新系统
+        var name = layer.name;
+        var parts = name.split("|");
+
         if (parts.length >= 6) {
-            // 如果已经是新格式，只替换九宫格部分 (索引为 4)
+            // 旧格式，只替换九宫格部分 (索引为 4)
             parts[4] = sliceStr;
             var newNameStr = parts[0] + "|" + parts[1] + "|" + parts[2] + "|" + parts[3] + "|" + parts[4] + "|" + parts[5];
             layer.name = newNameStr;
+            return newNameStr;
         } else {
-            // 如果是旧格式，尝试转换为新格式的基础结构
-            var docName = doc.name.split(".")[0];
-            var baseName = name.split("@")[0];
-            // 默认：模块名_基础名|图集|图片|尺寸|九宫格|导出
+            // 如果是全新图层且无元数据，创建一个初始元数据
+            var oldUnit = app.preferences.rulerUnits;
+            app.preferences.rulerUnits = Units.PIXELS;
             var bounds = layer.bounds;
             var w = Math.round(bounds[2].value - bounds[0].value);
             var h = Math.round(bounds[3].value - bounds[1].value);
+            app.preferences.rulerUnits = oldUnit;
 
-            var newNameStr = docName + "_" + baseName + "|atlas|image|" + w + "x" + h + "|" + sliceStr + "|1";
-            layer.name = newNameStr;
+            var docName = doc.name.split(".")[0];
+            var baseName = name.indexOf("@") !== -1 ? name.split("@")[1] : name;
+
+            var newMeta = {
+                moduleName: docName,
+                baseName: baseName,
+                outputType: "atlas",
+                compType: "image",
+                width: w,
+                height: h,
+                sliceSuffix: sliceStr,
+                isExport: true
+            };
+            setLayerMeta(layer.id, newMeta);
+
+            // 更新图层名为导出名
+            var exportName = buildExportName(newMeta);
+            if (exportName) layer.name = exportName;
+            return layer.name;
         }
-        return layer.name; // 返回新名称供前端同步
     } catch(e) { return "ERROR:" + e.toString(); }
 }
 

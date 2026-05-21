@@ -548,14 +548,8 @@ document.addEventListener("DOMContentLoaded", function() {
         var unityName = prefix + root + "_" + base;
         uiNaming.prevUnity.innerText = unityName;
 
-        // 3. PS 图层命名 (PS 内部存储全量元数据的格式)
-        var w = parseInt(uiNaming.w.value) || (currentLayerInfo ? currentLayerInfo.realWidth : 0);
-        var h = parseInt(uiNaming.h.value) || (currentLayerInfo ? currentLayerInfo.realHeight : 0);
-        var slice = (currentLayerInfo && currentLayerInfo.sliceSuffix) ? currentLayerInfo.sliceSuffix : "0,0,0,0";
-        var exportFlag = isExp ? "1" : "0";
-
-        var projName = root + "_" + base + "|" + finalOutStr + "|" + comp + "|" + w + "x" + h + "|" + slice + "|" + exportFlag;
-        uiNaming.prevProject.innerText = projName;
+        // 3. PS 图层显示名 (新系统下，直接等于导出基础名)
+        uiNaming.prevProject.innerText = expName;
     }
 
     // 手动保存/锁定模块名
