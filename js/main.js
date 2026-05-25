@@ -150,7 +150,7 @@ function checkAutoUpdate(isManual) {
                                 btnForce.style.background = "#4CAF50";
                                 btnForce.style.color = "#fff";
                             }
-                            showUpdateBanner(remoteVer, zipDownloadUrl, repoName, branch);
+                            showUpdateBannerV2(remoteVer, zipDownloadUrl, repoName, branch);
                             setStatus("发现新版本 v" + remoteVer + "，请点击顶部横幅更新", "");
                         } else {
                             if (isManual) {
@@ -213,7 +213,7 @@ function checkAutoUpdate(isManual) {
     }
 }
 
-function showUpdateBanner(newVersion, zipUrl, repoName, branch) {
+function showUpdateBanner_DEPRECATED(newVersion, zipUrl, repoName, branch) {
     var banner = document.getElementById("updateBanner");
     if (!banner) return;
 
@@ -338,7 +338,7 @@ function showUpdateBanner(newVersion, zipUrl, repoName, branch) {
     };
 }
 
-function startStatusPolling(banner, statusFile, checkInterval, checkCount, lastProgressTxt) {
+function startStatusPolling_DEPRECATED(banner, statusFile, checkInterval, checkCount, lastProgressTxt) {
     checkInterval = setInterval(function() {
         checkCount++;
         var result = window.cep.fs.readFile(statusFile);
@@ -379,9 +379,208 @@ function startStatusPolling(banner, statusFile, checkInterval, checkCount, lastP
 function showManualDownload(banner) {
      banner.innerText = "❌ 你的 PS 环境不支持静默更新，请手动下载！";
      banner.style.background = "#F44336";
-     setTimeout(function() {
-         window.cep.util.openURLInDefaultBrowser("https://github.com/" + githubOwner_global + "/PS-Tool/releases");
-     }, 1500);
+    setTimeout(function() {
+        window.cep.util.openURLInDefaultBrowser("https://github.com/" + githubOwner_global + "/PS-Tool/releases");
+    }, 1500);
+}
+
+function showUpdateBannerV2(newVersion, zipUrl, repoName, branch) {
+    var banner = document.getElementById("updateBanner");
+    if (!banner) return;
+
+    function cleanSystemPath(rawPath) {
+        var normalized = String(rawPath || "");
+        normalized = decodeURIComponent(normalized);
+        normalized = normalized.replace(/^file:\/*/i, "");
+        if (/^[A-Za-z]:/.test(normalized)) return normalized.replace(/\//g, "\\");
+        return normalized.replace(/^\/+/, "").replace(/\//g, "\\");
+    }
+
+    function getSystemPathSafe(name, fallbackConst) {
+        try {
+            if (csInterface && typeof csInterface.getSystemPath === "function" && typeof fallbackConst !== "undefined") {
+                return cleanSystemPath(csInterface.getSystemPath(fallbackConst));
+            }
+        } catch (e) {}
+        try {
+            if (window.__adobe_cep__ && typeof window.__adobe_cep__.getSystemPath === "function") {
+                return cleanSystemPath(window.__adobe_cep__.getSystemPath(name));
+            }
+        } catch (e2) {}
+        return "";
+    }
+
+    function arrayBufferToBase64(buffer) {
+        var bytes = new Uint8Array(buffer);
+        var chunkSize = 0x8000;
+        var binary = "";
+        for (var i = 0; i < bytes.length; i += chunkSize) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+        }
+        return btoa(binary);
+    }
+
+    banner.style.display = "block";
+    document.getElementById("newVersionText").innerText = newVersion;
+
+    banner.onclick = function() {
+        banner.innerText = "Preparing updater...";
+        banner.style.pointerEvents = "none";
+        banner.style.background = "#FFC107";
+
+        var localExtPath = getSystemPathSafe("extension", (typeof SystemPath !== "undefined" ? SystemPath.EXTENSION : undefined));
+        var userDataPath = getSystemPathSafe("userData", (typeof SystemPath !== "undefined" ? SystemPath.USER_DATA : undefined));
+        var psExe = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+
+        if (!localExtPath || !userDataPath) {
+            logMsg("Hot update init failed: cannot resolve system paths.");
+            showManualDownload(banner);
+            return;
+        }
+
+        var statusFile = userDataPath + "\\uilink_update_status.txt";
+        var tmpZip = userDataPath + "\\uilink_update.zip";
+        var tmpDir = userDataPath + "\\uilink_update_dir";
+        var scriptFile = userDataPath + "\\uilink_updater.ps1";
+
+        try { window.cep.fs.deleteFile(statusFile); } catch (cleanupErr) {}
+        try { window.cep.fs.deleteFile(scriptFile); } catch (cleanupErr2) {}
+
+        logMsg("Downloading update package via XHR...");
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", zipUrl, true);
+        xhr.responseType = "arraybuffer";
+        xhr.timeout = 60000;
+
+        xhr.onload = function() {
+            if (xhr.status !== 200 || !xhr.response) {
+                logMsg("XHR download failed: HTTP " + xhr.status);
+                showManualDownload(banner);
+                return;
+            }
+
+            logMsg("Download complete, writing zip to disk...");
+
+            var zipBase64 = "";
+            try {
+                zipBase64 = arrayBufferToBase64(xhr.response);
+            } catch (b64Err) {
+                logMsg("Base64 conversion failed: " + b64Err.message);
+                showManualDownload(banner);
+                return;
+            }
+
+            var zipWriteRes = window.cep.fs.writeFile(tmpZip, zipBase64, window.cep.encoding.Base64);
+            if (!zipWriteRes || zipWriteRes.err !== window.cep.fs.NO_ERROR) {
+                logMsg("Writing temp zip failed: " + (zipWriteRes ? zipWriteRes.err : "UNKNOWN"));
+                showManualDownload(banner);
+                return;
+            }
+
+            var psScript = [
+                "$ErrorActionPreference = 'Stop'",
+                "$statusFile = '" + statusFile.replace(/'/g, "''") + "'",
+                "$tmpZip = '" + tmpZip.replace(/'/g, "''") + "'",
+                "$tmpDir = '" + tmpDir.replace(/'/g, "''") + "'",
+                "$src = Join-Path $tmpDir '" + (repoName + "-" + branch + "\\*").replace(/'/g, "''") + "'",
+                "$dest = '" + (localExtPath + "\\").replace(/'/g, "''") + "'",
+                "try {",
+                "  Set-Content -Path $statusFile -Value '[1/3] Extracting update package...' -Encoding UTF8",
+                "  if (Test-Path $tmpDir) { Remove-Item -LiteralPath $tmpDir -Recurse -Force }",
+                "  Expand-Archive -LiteralPath $tmpZip -DestinationPath $tmpDir -Force",
+                "  Set-Content -Path $statusFile -Value '[2/3] Preparing elevated copy...' -Encoding UTF8",
+                "  $argList = '/c \"xcopy \"\"' + $src + '\"\" \"\"' + $dest + '\"\" /s /e /y /c /h & echo SUCCESS > \"\"' + $statusFile + '\"\"\"'",
+                "  Set-Content -Path $statusFile -Value '[3/3] Waiting for UAC / file copy...' -Encoding UTF8",
+                "  Start-Process cmd.exe -ArgumentList $argList -Verb RunAs -WindowStyle Hidden",
+                "} catch {",
+                "  Set-Content -Path $statusFile -Value ('ERROR: ' + $_.Exception.Message) -Encoding UTF8",
+                "}"
+            ].join("\r\n");
+
+            var scriptWriteRes = window.cep.fs.writeFile(scriptFile, psScript);
+            if (!scriptWriteRes || scriptWriteRes.err !== window.cep.fs.NO_ERROR) {
+                logMsg("Writing updater script failed: " + (scriptWriteRes ? scriptWriteRes.err : "UNKNOWN"));
+                showManualDownload(banner);
+                return;
+            }
+
+            if (!window.cep || !window.cep.process || typeof window.cep.process.createProcess !== "function") {
+                logMsg("CEP process API unavailable.");
+                showManualDownload(banner);
+                return;
+            }
+
+            logMsg("Launching PowerShell updater: " + psExe);
+            var procResult = window.cep.process.createProcess(
+                psExe,
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", scriptFile
+            );
+
+            if (!procResult || procResult.err !== 0) {
+                logMsg("PowerShell launch failed: " + (procResult ? procResult.err : "UNKNOWN"));
+                showManualDownload(banner);
+                return;
+            }
+
+            startStatusPollingV2(banner, statusFile);
+        };
+
+        xhr.onerror = function() {
+            logMsg("XHR download network error.");
+            showManualDownload(banner);
+        };
+
+        xhr.ontimeout = function() {
+            logMsg("XHR download timed out.");
+            showManualDownload(banner);
+        };
+
+        xhr.send();
+    };
+}
+
+function startStatusPollingV2(banner, statusFile) {
+    var checkCount = 0;
+    var lastProgressTxt = "";
+    var checkInterval = setInterval(function() {
+        checkCount++;
+        var result = window.cep.fs.readFile(statusFile);
+        if (result.err === window.cep.fs.NO_ERROR) {
+            var txt = String(result.data || "").trim();
+            if (txt.indexOf("SUCCESS") !== -1) {
+                clearInterval(checkInterval);
+                banner.innerText = "Update complete, reloading...";
+                banner.style.background = "#4CAF50";
+                try { window.cep.fs.deleteFile(statusFile); } catch (cleanupErr) {}
+                setTimeout(function() { window.location.reload(true); }, 1500);
+            } else if (txt.indexOf("ERROR:") === 0) {
+                clearInterval(checkInterval);
+                banner.innerText = "Update failed, please download manually.";
+                banner.style.background = "#F44336";
+                banner.style.pointerEvents = "auto";
+                setStatus(txt, "error");
+                logMsg(txt);
+            } else if (txt && txt !== lastProgressTxt) {
+                banner.innerText = "... " + txt;
+                logMsg("Update progress: " + txt);
+                lastProgressTxt = txt;
+            }
+        } else if (checkCount % 2 === 0) {
+            logMsg("Waiting for status file...");
+        }
+    }, 1000);
+
+    setTimeout(function() {
+        clearInterval(checkInterval);
+        if (banner.innerText.indexOf("Update complete") === -1 && banner.innerText.indexOf("Update failed") === -1) {
+            banner.innerText = "Update may still be running in background or blocked by UAC. Please restart PS manually later.";
+            banner.style.background = "#FF9800";
+            banner.style.pointerEvents = "auto";
+        }
+    }, 90000);
 }
 
 document.addEventListener("DOMContentLoaded", function() {

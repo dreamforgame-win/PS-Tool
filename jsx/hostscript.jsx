@@ -1166,6 +1166,18 @@ function getActiveLayerPreview() {
         // 切回原文档，执行图层复制
         app.activeDocument = doc;
         layer.duplicate(tempDoc, ElementPlacement.PLACEATBEGINNING);
+        app.activeDocument = tempDoc;
+        try {
+            var previewLayer = tempDoc.activeLayer;
+            if (previewLayer) {
+                var previewBounds = previewLayer.bounds;
+                var offsetX = previewBounds[0].as("px");
+                var offsetY = previewBounds[1].as("px");
+                if (Math.abs(offsetX) > 0.01 || Math.abs(offsetY) > 0.01) {
+                    previewLayer.translate(UnitValue(-offsetX, "px"), UnitValue(-offsetY, "px"));
+                }
+            }
+        } catch (moveErr) {}
         
         // 切到新文档处理预览
         app.activeDocument = tempDoc;
