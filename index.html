@@ -46,8 +46,45 @@
 
         /* 命名工具 */
         .name-group { display: flex; gap: 4px; margin-bottom: 10px; align-items: center; }
+        .name-row { display: flex; gap: 8px; margin-bottom: 10px; }
+        .name-row .name-group { flex: 1; min-width: 0; margin-bottom: 0; }
+        .name-label { color: #aaa; width: 44px; flex-shrink: 0; text-align: right; }
+        .name-stack { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+        .name-inline { display: flex; gap: 6px; align-items: center; min-width: 0; }
+        .name-select { width: 118px; flex: none; background: #222; border: 1px solid #555; color: #bbb; padding: 6px; border-radius: 3px; }
         .name-input { flex: 1; background: #222; border: 1px solid #555; color: #fff; padding: 6px; border-radius: 3px; }
         .size-input { width: 45px; background: #222; border: 1px solid #555; color: #fff; padding: 6px; border-radius: 3px; text-align: center; }
+        .slice-display { flex:1; background:#222; color:#00e676; font-size:11px; padding:6px; border:1px solid #333; border-radius:3px; min-height:14px; min-width:0; }
+        .position-panel { background: #1d1d1d; border: 1px solid #3a3a3a; border-radius: 4px; padding: 10px; margin-top: 10px; }
+        .position-layout { display: flex; gap: 10px; align-items: stretch; }
+        .position-sidebar { width: 184px; flex: 0 0 184px; display: flex; flex-direction: column; gap: 8px; }
+        .size-cluster { position: relative; background: #181818; border: 1px solid #2f2f2f; border-radius: 4px; padding: 8px; }
+        .size-cluster .size-top { display: flex; align-items: center; gap: 4px; }
+        .size-cluster .size-note { margin-top: 6px; font-size: 10px; color: #777; line-height: 1.4; }
+        .position-main { flex: 1; min-width: 0; }
+        .position-stage { position: relative; width: 100%; height: 148px; background:
+            linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.03) 75%),
+            linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.03) 75%);
+            background-size: 16px 16px;
+            background-position: 0 0, 8px 8px;
+            border: 1px solid #444;
+            border-radius: 4px;
+            overflow: hidden; }
+        .position-frame { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+        .position-frame-box { position: relative; border: 1px dashed #4fc3f7; background: rgba(79, 195, 247, 0.06); }
+        .position-guide { position: absolute; background: rgba(255,255,255,0.12); pointer-events: none; transition: background 0.12s, box-shadow 0.12s; }
+        .position-guide-x { top: 0; bottom: 0; left: 50%; width: 1px; transform: translateX(-50%); }
+        .position-guide-y { left: 0; right: 0; top: 50%; height: 1px; transform: translateY(-50%); }
+        .position-guide.active { background: #ffb74d; box-shadow: 0 0 10px rgba(255, 183, 77, 0.55); }
+        .position-image { position: absolute; top: 0; left: 0; cursor: grab; user-select: none; -webkit-user-drag: none; }
+        .position-image.dragging { cursor: grabbing; }
+        .position-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px; pointer-events: none; }
+        .position-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; font-size: 10px; color: #888; }
+        .position-overlay { position: absolute; right: 8px; bottom: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; z-index: 20; pointer-events: none; }
+        .position-overlay .position-chip { background: rgba(20, 20, 20, 0.88); border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; padding: 4px 6px; color: #d0d0d0; font-size: 10px; line-height: 1; pointer-events: auto; }
+        .position-actions { display: flex; gap: 6px; align-items: center; }
+        .btn-mini { background: #2f2f2f; color: #ddd; border: 1px solid #444; padding: 4px 8px; font-size: 10px; border-radius: 3px; cursor: pointer; }
+        .btn-mini:hover { background: #3a3a3a; }
 
         button { background: #555; color: white; border: 1px solid #333; padding: 6px 10px; border-radius: 3px; cursor: pointer; font-size: 12px; transition: background 0.1s; }
         button:hover { background: #666; }
@@ -55,6 +92,27 @@
         button:disabled { background: #444; color: #777; cursor: not-allowed; }
         .btn-primary { background: #1473E6; border: 1px solid #0D66D0; font-weight: bold; }
         .btn-primary:hover { background: #0D66D0; }
+        .btn-save { position: relative; overflow: hidden; transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, color 0.2s; }
+        .btn-save.is-clean { background: #444; border-color: #444; color: #8f8f8f; box-shadow: none; }
+        .btn-save.is-clean:hover { background: #444; }
+        .btn-save.is-dirty { background: #d9731a; border-color: #f28d22; color: #fff7ec; box-shadow: 0 0 0 1px rgba(242, 141, 34, 0.25), 0 0 18px rgba(242, 141, 34, 0.22); }
+        .btn-save.is-dirty:hover { background: #ea811a; }
+        .btn-save.is-dirty::after { content: ""; position: absolute; top: 0; bottom: 0; left: -42%; width: 38%; background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.42), rgba(255,255,255,0)); transform: skewX(-24deg); animation: saveGlow 1.8s linear infinite; }
+        .btn-save.is-saving { background: #1473E6; border-color: #0D66D0; color: #fff; box-shadow: none; }
+        .btn-save.is-saving::after { display: none; }
+
+        @keyframes saveGlow {
+            0% { transform: translateX(0) skewX(-24deg); opacity: 0; }
+            12% { opacity: 1; }
+            55% { opacity: 1; }
+            100% { transform: translateX(360%) skewX(-24deg); opacity: 0; }
+        }
+
+        @media (max-width: 420px) {
+            .position-layout { flex-direction: column; }
+            .position-sidebar { width: auto; flex-basis: auto; }
+            .position-stage { height: 132px; }
+        }
 
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
 
@@ -225,82 +283,120 @@
             <span id="btnSaveModule" style="font-size: 10px; color: #4fc3f7; cursor: pointer; margin-left: 4px; border: 1px solid #4fc3f7; padding: 0 2px; border-radius: 2px;" title="锁定当前模块名">记忆</span>
         </div>
 
-        <div class="title" style="margin-top:15px;">组件命名规则</div>
+        <div class="title" style="margin-top:15px;">图层参数</div>
         
-        <!-- 2. 基础名称 -->
         <div class="name-group">
-            <span style="color:#aaa; width:65px;">基础名称:</span>
-            <input type="text" id="moduleBaseName" class="name-input" placeholder="请输入图层核心名">
-        </div>
-
-        <!-- 3. 条件选择 -->
-        <div class="name-group">
-            <span style="color:#aaa; width:65px;">输出类型:</span>
-            <select id="moduleOutputType" class="name-input" style="appearance: auto; cursor: pointer;">
-                <option value="atlas">图集 Atlas</option>
-                <option value="texture">大图 Texture</option>
-            </select>
-        </div>
-
-        <!-- 3.1 图集前缀 (新增，仅图集时显示) -->
-        <div class="name-group" id="groupAtlasPrefix" style="position: relative;">
-            <span style="color:#aaa; width:65px;">图集前缀:</span>
-            <select id="moduleAtlasPrefix" class="name-input" style="appearance: auto; cursor: pointer;">
-                <option value="common">common</option>
-            </select>
-            <span id="btnManagePrefix" style="font-size: 10px; color: #4fc3f7; cursor: pointer; margin-left: 4px; border: 1px solid #4fc3f7; padding: 1px 6px; border-radius: 2px;" title="管理图集前缀">+</span>
-            
-            <!-- 预设下拉菜单 (绝对定位) -->
-            <div id="prefixMenu" style="display:none; position:absolute; top:28px; right:0; width:120px; background:#252525; border:1px solid #444; border-radius:4px; z-index:100; box-shadow:0 4px 10px rgba(0,0,0,0.5); padding:6px;">
-                <div style="font-size:10px; color:#888; margin-bottom:4px; border-bottom:1px solid #333; padding-bottom:4px;">图集前缀管理</div>
-                <div id="prefixList" style="max-height:100px; overflow-y:auto;"></div>
-                <div id="btnAddPrefix" style="margin-top:6px; font-size:10px; color:#00e676; cursor:pointer; text-align:center; border-top:1px solid #333; padding-top:4px;">+ 添加新前缀</div>
+            <span class="name-label">名称:</span>
+            <div class="name-stack">
+                <div class="name-inline">
+                    <input type="text" id="moduleBaseName" class="name-input" placeholder="请输入图层核心名">
+                    <select id="moduleBaseHistory" class="name-select">
+                        <option value="">最近名称</option>
+                    </select>
+                </div>
+                <span style="font-size:10px; color:#777;">自动记录最近 10 条已保存名称，可直接回填</span>
             </div>
         </div>
 
-        <div class="name-group">
-            <span style="color:#aaa; width:65px;">组件类型:</span>
-            <select id="moduleCompType" class="name-input" style="appearance: auto; cursor: pointer;">
-                <option value="image">图片 (sp_)</option>
-                <option value="button">按钮 (btn_)</option>
-                <option value="texture">大图 (tex_)</option>
-                <option value="slider">滑条 (sli_)</option>
-                <option value="dropdown">下拉菜单 (drop_)</option>
-                <option value="toggle">勾选按钮 (tog_)</option>
-            </select>
-        </div>
+        <div class="name-row">
+            <div class="name-group">
+                <span class="name-label">类型:</span>
+                <select id="moduleOutputType" class="name-input" style="appearance: auto; cursor: pointer;">
+                    <option value="atlas">图集 Atlas</option>
+                    <option value="texture">大图 Texture</option>
+                </select>
+            </div>
 
-        <!-- 4. 尺寸规格 -->
-        <div class="name-group">
-            <span style="color:#aaa; width:65px;">尺寸后缀:</span>
-            <input type="number" id="moduleSizeW" class="size-input" style="width:40px;" placeholder="宽">
-            <span style="color:#555; margin:0 2px;">x</span>
-            <input type="number" id="moduleSizeH" class="size-input" style="width:40px;" placeholder="高">
-            <span id="btnResetSize" style="font-size: 10px; color: #aaa; cursor: pointer; margin-left: 6px; border: 1px solid #444; padding: 1px 4px; border-radius: 2px;" title="重置为原图尺寸">重置</span>
-            <span id="btnOpenPreset" style="font-size: 10px; color: #4fc3f7; cursor: pointer; margin-left: 4px; border: 1px solid #4fc3f7; padding: 1px 6px; border-radius: 2px;" title="管理尺寸预设">+</span>
-            <span style="font-size:10px; color:#666; margin-left:6px;" id="lblRealSize">(-)</span>
-            
-            <!-- 预设下拉菜单 (绝对定位) -->
-            <div id="presetMenu" style="display:none; position:absolute; top:28px; right:0; width:120px; background:#252525; border:1px solid #444; border-radius:4px; z-index:100; box-shadow:0 4px 10px rgba(0,0,0,0.5); padding:6px;">
-                <div style="font-size:10px; color:#888; margin-bottom:4px; border-bottom:1px solid #333; padding-bottom:4px;">尺寸预设</div>
-                <div id="presetList" style="max-height:150px; overflow-y:auto;"></div>
-                <div id="btnAddCurrentPreset" style="margin-top:6px; font-size:10px; color:#00e676; cursor:pointer; text-align:center; border-top:1px solid #333; pt:4px;">+ 添加当前尺寸</div>
+            <div class="name-group" id="groupAtlasPrefix" style="position: relative;">
+                <span class="name-label">前缀:</span>
+                <select id="moduleAtlasPrefix" class="name-input" style="appearance: auto; cursor: pointer;">
+                    <option value="common">common</option>
+                </select>
+                <span id="btnManagePrefix" style="font-size: 10px; color: #4fc3f7; cursor: pointer; margin-left: 4px; border: 1px solid #4fc3f7; padding: 1px 6px; border-radius: 2px;" title="管理图集前缀">+</span>
+                
+                <div id="prefixMenu" style="display:none; position:absolute; top:28px; right:0; width:120px; background:#252525; border:1px solid #444; border-radius:4px; z-index:100; box-shadow:0 4px 10px rgba(0,0,0,0.5); padding:6px;">
+                    <div style="font-size:10px; color:#888; margin-bottom:4px; border-bottom:1px solid #333; padding-bottom:4px;">图集前缀管理</div>
+                    <div id="prefixList" style="max-height:100px; overflow-y:auto;"></div>
+                    <div id="btnAddPrefix" style="margin-top:6px; font-size:10px; color:#00e676; cursor:pointer; text-align:center; border-top:1px solid #333; padding-top:4px;">+ 添加新前缀</div>
+                </div>
             </div>
         </div>
 
-        <!-- 5. 九宫格信息 (补回) -->
-        <div class="name-group">
-            <span style="color:#aaa; width:65px;">九宫格:</span>
-            <div id="moduleSliceDisplay" style="flex:1; background:#222; color:#00e676; font-size:11px; padding:6px; border:1px solid #333; border-radius:3px; min-height:14px;">无</div>
+        <div class="name-row">
+            <div class="name-group">
+                <span class="name-label">类型:</span>
+                <select id="moduleCompType" class="name-input" style="appearance: auto; cursor: pointer;">
+                    <option value="image">图片 (sp_)</option>
+                    <option value="button">按钮 (btn_)</option>
+                    <option value="texture">大图 (tex_)</option>
+                    <option value="slider">滑条 (sli_)</option>
+                    <option value="dropdown">下拉菜单 (drop_)</option>
+                    <option value="toggle">勾选按钮 (tog_)</option>
+                </select>
+            </div>
+
+            <div class="name-group">
+                <span class="name-label">九宫格:</span>
+                <div id="moduleSliceDisplay" class="slice-display">无</div>
+            </div>
         </div>
 
-        <!-- 6. 导出控制 (胶囊开关) -->
-        <div class="row" style="margin-top:10px;">
-            <span style="color:#aaa;">导出控制 (是否切图):</span>
-            <label class="switch">
-                <input type="checkbox" id="chkExportEnable">
-                <span class="slider-round"></span>
-            </label>
+        <div class="position-panel">
+            <div class="row" style="margin-bottom:8px;">
+                <span style="color:#aaa;">位置预览:</span>
+                <span style="font-size:10px; color:#777;">拖动图层预览，保存后导出按此位置生效</span>
+            </div>
+            <div class="position-layout">
+                <div class="position-sidebar">
+                    <div class="size-cluster">
+                        <div class="size-top">
+                            <span style="color:#aaa; width:30px; flex-shrink:0;">尺寸</span>
+                            <input type="number" id="moduleSizeW" class="size-input" style="width:46px;" placeholder="宽">
+                            <span style="color:#555; margin:0 2px;">x</span>
+                            <input type="number" id="moduleSizeH" class="size-input" style="width:46px;" placeholder="高">
+                            <span id="btnResetSize" style="font-size: 10px; color: #aaa; cursor: pointer; margin-left: 2px; border: 1px solid #444; padding: 1px 4px; border-radius: 2px;" title="重置为原图尺寸">重置</span>
+                            <span id="btnOpenPreset" style="font-size: 10px; color: #4fc3f7; cursor: pointer; margin-left: 2px; border: 1px solid #4fc3f7; padding: 1px 6px; border-radius: 2px;" title="管理尺寸预设">+</span>
+                            <span style="font-size:10px; color:#777; margin-left:4px;">原图 <span id="lblRealSize">(-)</span></span>
+                        </div>
+
+                        <div id="presetMenu" style="display:none; position:absolute; top:30px; right:8px; width:120px; background:#252525; border:1px solid #444; border-radius:4px; z-index:100; box-shadow:0 4px 10px rgba(0,0,0,0.5); padding:6px;">
+                            <div style="font-size:10px; color:#888; margin-bottom:4px; border-bottom:1px solid #333; padding-bottom:4px;">尺寸预设</div>
+                            <div id="presetList" style="max-height:150px; overflow-y:auto;"></div>
+                            <div id="btnAddCurrentPreset" style="margin-top:6px; font-size:10px; color:#00e676; cursor:pointer; text-align:center; border-top:1px solid #333; pt:4px;">+ 添加当前尺寸</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="position-main">
+                    <div id="positionPreviewStage" class="position-stage">
+                        <div class="position-frame">
+                            <div id="positionPreviewFrame" class="position-frame-box">
+                                <div id="positionGuideX" class="position-guide position-guide-x"></div>
+                                <div id="positionGuideY" class="position-guide position-guide-y"></div>
+                                <img id="positionPreviewImage" class="position-image" src="" alt="">
+                            </div>
+                        </div>
+                        <div class="position-overlay">
+                            <span id="positionPreviewInfo" class="position-chip">位置: (0, 0)</span>
+                            <div class="position-actions" style="pointer-events:auto;">
+                                <button id="btnResetPosition" type="button" class="btn-mini">居中</button>
+                            </div>
+                        </div>
+                        <div id="positionPreviewEmpty" class="position-empty">请选择图层后预览位置</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row" style="margin-top:10px; align-items:flex-start;">
+            <span style="color:#aaa;">是否导出:</span>
+            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+                <label class="switch">
+                    <input type="checkbox" id="chkExportEnable">
+                    <span class="slider-round"></span>
+                </label>
+                <span style="font-size:10px; color:#777;">切换后立即生效，无需保存</span>
+            </div>
         </div>
 
         <!-- 7. 命名预览 -->
@@ -317,7 +413,7 @@
         </div>
 
         <div style="margin-top: 15px;">
-            <button id="btnApplyModularName" class="btn-primary" style="width: 100%;">确认并应用重命名</button>
+            <button id="btnApplyModularName" class="btn-primary btn-save is-clean" style="width: 100%;" disabled>保存参数</button>
         </div>
     </div>
 

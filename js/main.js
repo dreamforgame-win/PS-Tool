@@ -386,6 +386,120 @@ function showManualDownload(banner) {
 
 document.addEventListener("DOMContentLoaded", function() {
 
+    function ensureEnhancedPanels() {
+        if (!document.getElementById("dynamic-ai-panel-style")) {
+            var styleEl = document.createElement("style");
+            styleEl.id = "dynamic-ai-panel-style";
+            styleEl.textContent = [
+                ".sub-tabs { display:flex; background:#1e1e1e; margin-bottom:12px; border-radius:4px; overflow:hidden; border:1px solid #444; }",
+                ".sub-tab-btn { flex:1; padding:6px 0; text-align:center; cursor:pointer; color:#888; font-size:11px; }",
+                ".sub-tab-btn:hover { background:#2a2a2a; }",
+                ".sub-tab-btn.active { background:#4fc3f7; color:#000; font-weight:bold; }",
+                ".sub-tab-content { display:none; }",
+                ".sub-tab-content.active { display:block; }",
+                "#sub-ailab .name-group { display:grid; grid-template-columns:72px minmax(0, 1fr); gap:8px; align-items:start !important; }",
+                "#sub-ailab .name-group > span { width:auto !important; line-height:32px; margin-top:0 !important; }",
+                "#sub-ailab .name-group > input, #sub-ailab .name-group > div { min-width:0; }",
+                "#sub-ailab .name-group > div[style*='flex: 1'] > div[style*='display: flex'] { display:grid !important; grid-template-columns:minmax(0, 1fr); gap:6px !important; }",
+                "#sub-ailab #aiModelSelect, #sub-ailab #aiModel { width:100%; min-width:0; box-sizing:border-box; flex:none !important; }",
+                "#sub-ailab #btnFetchModels { justify-self:end; min-width:72px; }"
+            ].join("\n");
+            document.head.appendChild(styleEl);
+        }
+
+        var namingTabBtn = document.querySelector('.tab-btn[data-target="tab-naming"]');
+        if (namingTabBtn) namingTabBtn.textContent = "\u56fe\u5c42\u5c5e\u6027";
+        var sliceTabBtn = document.querySelector('.tab-btn[data-target="tab-slice"]');
+        if (sliceTabBtn) sliceTabBtn.textContent = "\u4e5d\u5bab\u683c";
+        var exportTabBtn = document.querySelector('.tab-btn[data-target="tab-export"]');
+        if (exportTabBtn) exportTabBtn.textContent = "\u626b\u63cf\u5bfc\u51fa";
+        var toolsTabBtn = document.querySelector('.tab-btn[data-target="tab-tools"]');
+        if (toolsTabBtn && toolsTabBtn.parentNode) toolsTabBtn.parentNode.removeChild(toolsTabBtn);
+
+        function buildSubtabRoot(tabEl, defs) {
+            if (!tabEl || tabEl.querySelector(".sub-tabs")) return;
+            var existingNodes = Array.prototype.slice.call(tabEl.childNodes);
+            tabEl.innerHTML = "";
+
+            var subTabs = document.createElement("div");
+            subTabs.className = "sub-tabs";
+            defs.forEach(function(def, index) {
+                var btn = document.createElement("div");
+                btn.className = "sub-tab-btn" + (index === 0 ? " active" : "");
+                btn.setAttribute("data-target", def.id);
+                btn.textContent = def.label;
+                subTabs.appendChild(btn);
+            });
+            tabEl.appendChild(subTabs);
+
+            defs.forEach(function(def, index) {
+                var pane = document.createElement("div");
+                pane.id = def.id;
+                pane.className = "sub-tab-content" + (index === 0 ? " active" : "");
+                if (index === 0) {
+                    existingNodes.forEach(function(node) { pane.appendChild(node); });
+                } else if (typeof def.render === "function") {
+                    def.render(pane);
+                }
+                tabEl.appendChild(pane);
+            });
+        }
+
+        buildSubtabRoot(document.getElementById("tab-naming"), [
+            { id: "sub-naming-props", label: "\u5c5e\u6027" },
+            {
+                id: "sub-naming-clear",
+                label: "AI\u6e05\u6670",
+                render: function(pane) {
+                    pane.innerHTML = [
+                        '<div class="title" style="margin-top: 5px;">AI \u63d0\u793a\u8bcd (Prompt)</div>',
+                        '<div style="font-size: 10px; color: #888; margin-bottom: 6px; line-height: 1.4;">\u4f60\u53ef\u4ee5\u6839\u636e\u4e0d\u540c\u56fe\u6807\u98ce\u683c\u8c03\u6574\u63d0\u793a\u8bcd\u3002\u9ed8\u8ba4\u63d0\u793a\u8bcd\u4f1a\u5c3d\u91cf\u4fdd\u6301\u539f\u56fe\u7ed3\u6784\uff0c\u53ea\u505a\u9ad8\u6e05\u5316\u3002</div>',
+                        '<textarea id="aiPromptInput" class="name-input" style="width: 100%; height: 160px; resize: vertical; margin-bottom: 15px; box-sizing: border-box; font-family: monospace; font-size: 11px;"></textarea>',
+                        '<div class="title">\u6267\u884c\u9ad8\u6e05\u589e\u5f3a</div>',
+                        '<div style="display: flex; gap: 8px; flex-direction: column;">',
+                        '<button id="btnMakeClear" style="background: #332a00; color: #ffca28; border: 1px solid #ffca28; padding: 10px; font-size: 12px; font-weight: bold; border-radius: 3px;">\u2728 \u4f7f\u7528\u4e91\u7aef AI \u6e05\u6670\u5316</button>',
+                        '<button id="btnMakeClearTest" style="background: #1b5e20; color: #a5d6a7; border: 1px solid #4caf50; padding: 10px; font-size: 12px; font-weight: bold; border-radius: 3px;">\ud83d\udd2c \u4f7f\u7528\u672c\u5730 ESRGAN (Test Pipeline)</button>',
+                        '</div>'
+                    ].join("");
+                }
+            }
+        ]);
+
+        var toolsTab = document.getElementById("tab-tools");
+        buildSubtabRoot(document.getElementById("tab-slice"), [
+            { id: "sub-slice-crop", label: "\u5207\u56fe" },
+            {
+                id: "sub-slice-scale",
+                label: "\u6269\u56fe",
+                render: function(pane) {
+                    if (toolsTab) {
+                        while (toolsTab.firstChild) pane.appendChild(toolsTab.firstChild);
+                    }
+                }
+            }
+        ]);
+        if (toolsTab && toolsTab.parentNode) toolsTab.parentNode.removeChild(toolsTab);
+
+        buildSubtabRoot(document.getElementById("tab-setting"), [
+            { id: "sub-update", label: "\u68c0\u67e5\u66f4\u65b0" },
+            {
+                id: "sub-ailab",
+                label: "AI\u5b9e\u9a8c\u5ba4",
+                render: function(pane) {
+                    pane.innerHTML = [
+                        '<div style="background: #222; border: 1px solid #444; border-radius: 4px; padding: 12px; margin-bottom: 12px;">',
+                        '<div class="name-group"><span style="color:#aaa; width:65px;">API URL:</span><input type="text" id="aiApiUrl" class="name-input" placeholder="\u4f8b\u5982: https://api.openai.com/v1/chat/completions"></div>',
+                        '<div class="name-group"><span style="color:#aaa; width:65px;">API Key:</span><input type="password" id="aiApiKey" class="name-input" placeholder="Bearer Token / \u7f51\u5173\u5bc6\u94a5"></div>',
+                        '<div class="name-group" style="align-items: flex-start; margin-top: 10px;"><span style="color:#aaa; width:65px; margin-top: 6px;">\u6a21\u578b\u9009\u62e9:</span><div style="flex: 1;"><div style="display: flex; gap: 4px;"><select id="aiModelSelect" class="name-input" style="appearance: auto; cursor: pointer; flex: 1; display: none;"></select><input type="text" id="aiModel" class="name-input" placeholder="\u4f8b\u5982: gemini/gemini-3.1-flash-image-preview" style="flex: 1;"><button id="btnFetchModels" class="btn-primary" style="padding: 0 8px; font-size: 11px;">\u83b7\u53d6</button></div><div style="font-size: 10px; color: #888; margin-top: 4px;">\u652f\u6301 Gemini \u539f\u751f\u63a5\u53e3\u6216\u7b2c\u4e09\u65b9 OpenAI \u517c\u5bb9\u7f51\u5173\u3002\u70b9\u51fb\u201c\u83b7\u53d6\u201d\u62c9\u53d6\u53ef\u7528\u6a21\u578b\u5217\u8868\u3002</div></div></div>',
+                        '</div>'
+                    ].join("");
+                }
+            }
+        ]);
+    }
+
+    ensureEnhancedPanels();
+
     // 首先清空一次 log，防止重叠
     var logArea = document.getElementById("logArea");
     if(logArea) logArea.innerHTML = "";
@@ -419,6 +533,76 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     });
 
+    var subTabBtns = document.querySelectorAll('.sub-tab-btn');
+    subTabBtns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var subTabsRoot = btn.parentElement;
+            if (!subTabsRoot) return;
+
+            var tabContentRoot = subTabsRoot.parentElement;
+            if (!tabContentRoot) return;
+
+            subTabsRoot.querySelectorAll('.sub-tab-btn').forEach(function(b) {
+                b.classList.remove('active');
+            });
+            Array.prototype.forEach.call(tabContentRoot.children, function(child) {
+                if (child.classList && child.classList.contains('sub-tab-content')) {
+                    child.classList.remove('active');
+                }
+            });
+
+            btn.classList.add('active');
+            var targetId = btn.getAttribute('data-target');
+            var targetEl = document.getElementById(targetId);
+            if (targetEl) {
+                targetEl.classList.add('active');
+            }
+        });
+    });
+
+    if (false && uiNaming.btnResetPosition) {
+        uiNaming.btnResetPosition.addEventListener("click", function() {
+            if (!currentPositionData.imgW || !currentPositionData.imgH) return;
+            centerPositionPreview();
+            setStatus("位置已重置为居中，点击保存参数后生效。", "");
+        });
+    }
+
+    if (false && uiNaming.positionImage) {
+        uiNaming.positionImage.addEventListener("mousedown", function(e) {
+            if (!currentPositionData.hasImage) return;
+            isDraggingPosition = true;
+            positionDragState.startX = e.clientX;
+            positionDragState.startY = e.clientY;
+            positionDragState.startPosX = currentPositionData.posX;
+            positionDragState.startPosY = currentPositionData.posY;
+            positionDragState.scale = parseFloat(uiNaming.positionFrame.getAttribute("data-scale") || "1") || 1;
+            uiNaming.positionImage.classList.add("dragging");
+            e.preventDefault();
+        });
+    }
+
+    document.addEventListener("mousemove", function(e) {
+        if (!isDraggingPosition) return;
+        var scale = positionDragState.scale || 1;
+        currentPositionData.posX = positionDragState.startPosX + (e.clientX - positionDragState.startX) / scale;
+        currentPositionData.posY = positionDragState.startPosY + (e.clientY - positionDragState.startY) / scale;
+        clampPositionData();
+        renderPositionPreview();
+        e.preventDefault();
+    });
+
+    document.addEventListener("mouseup", function() {
+        if (!isDraggingPosition) return;
+        isDraggingPosition = false;
+        if (uiNaming.positionImage) uiNaming.positionImage.classList.remove("dragging");
+        setStatus("位置已更新，点击保存参数后生效。", "");
+    });
+
+    window.addEventListener("resize", function() {
+        renderPositionPreview();
+    });
+
     // ==========================================
     // 1. 属性命名模块逻辑 (模块化重构版)
     // ==========================================
@@ -428,6 +612,7 @@ document.addEventListener("DOMContentLoaded", function() {
     var uiNaming = {
         root: document.getElementById("moduleRootName"),
         base: document.getElementById("moduleBaseName"),
+        baseHistory: document.getElementById("moduleBaseHistory"),
         output: document.getElementById("moduleOutputType"),
         comp: document.getElementById("moduleCompType"),
         w: document.getElementById("moduleSizeW"),
@@ -447,8 +632,53 @@ document.addEventListener("DOMContentLoaded", function() {
         btnManagePrefix: document.getElementById("btnManagePrefix"),
         prefixMenu: document.getElementById("prefixMenu"),
         prefixList: document.getElementById("prefixList"),
-        btnAddPrefix: document.getElementById("btnAddPrefix")
+        btnAddPrefix: document.getElementById("btnAddPrefix"),
+        positionStage: document.getElementById("positionPreviewStage"),
+        positionFrame: document.getElementById("positionPreviewFrame"),
+        positionImage: document.getElementById("positionPreviewImage"),
+        positionEmpty: document.getElementById("positionPreviewEmpty"),
+        positionInfo: document.getElementById("positionPreviewInfo"),
+        btnResetPosition: document.getElementById("btnResetPosition"),
+        positionGuideX: document.getElementById("positionGuideX"),
+        positionGuideY: document.getElementById("positionGuideY")
     };
+    var recentBaseNames = JSON.parse(localStorage.getItem("UILink_RecentBaseNames") || "[]");
+    var currentPositionData = {
+        imgW: 0,
+        imgH: 0,
+        frameW: 0,
+        frameH: 0,
+        posX: 0,
+        posY: 0,
+        previewPath: "",
+        hasImage: false,
+        snapX: false,
+        snapY: false
+    };
+    var isDraggingPosition = false;
+    var positionDragState = { startX: 0, startY: 0, startPosX: 0, startPosY: 0 };
+
+    if (uiNaming.btnResetPosition) {
+        uiNaming.btnResetPosition.addEventListener("click", function() {
+            if (!currentPositionData.imgW || !currentPositionData.imgH) return;
+            centerPositionPreview();
+            setStatus("位置已重置为居中，点击保存参数后生效。", "");
+        });
+    }
+
+    if (uiNaming.positionImage) {
+        uiNaming.positionImage.addEventListener("mousedown", function(e) {
+            if (!currentPositionData.hasImage) return;
+            isDraggingPosition = true;
+            positionDragState.startX = e.clientX;
+            positionDragState.startY = e.clientY;
+            positionDragState.startPosX = currentPositionData.posX;
+            positionDragState.startPosY = currentPositionData.posY;
+            positionDragState.scale = parseFloat(uiNaming.positionFrame.getAttribute("data-scale") || "1") || 1;
+            uiNaming.positionImage.classList.add("dragging");
+            e.preventDefault();
+        });
+    }
 
     // 轮询同步逻辑
     setInterval(function() {
@@ -464,6 +694,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
                 lastLayerNameForSync = info.fullName;
                 currentLayerInfo = info;
+                currentPositionData.previewPath = "";
                 console.log("Synced Info:", info);
 
                 // 无论在哪一个页签，只要图层发生切换，都必须优先同步图层自身的数据到输入框！
@@ -501,6 +732,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 uiNaming.slice.innerText = info.sliceSuffix || "无";
 
                 updatePreview();
+                loadPositionPreview(true);
 
                 if (isSliceActive) {
                     // 如果当前在九宫格页面，自动触发读取（此时读取到的 w 和 h 就是最新鲜的啦！）
@@ -521,6 +753,7 @@ document.addEventListener("DOMContentLoaded", function() {
         if (!base) {
             uiNaming.prevExport.innerText = "-";
             uiNaming.prevProject.innerText = "-";
+            updateSaveButtonState();
             return;
         }
 
@@ -550,6 +783,315 @@ document.addEventListener("DOMContentLoaded", function() {
 
         // 3. PS 图层显示名 (新系统下，直接等于导出基础名)
         uiNaming.prevProject.innerText = expName;
+        updateSaveButtonState();
+    }
+
+    function buildRenameApplyInfo() {
+        var finalOutputType = uiNaming.output.value;
+        if (finalOutputType === "atlas") {
+            finalOutputType = "atlas:" + (uiNaming.atlasPrefix.value || "common");
+        }
+
+        return {
+            moduleName: uiNaming.root.value.trim(),
+            baseName: uiNaming.base.value.trim(),
+            width: parseInt(uiNaming.w.value, 10) || currentLayerInfo.realWidth,
+            height: parseInt(uiNaming.h.value, 10) || currentLayerInfo.realHeight,
+            outputType: finalOutputType,
+            compType: uiNaming.comp.value,
+            isExport: uiNaming.exportChk.checked,
+            sliceSuffix: currentLayerInfo.sliceSuffix || "0,0,0,0",
+            posX: Math.round(currentPositionData.posX || 0),
+            posY: Math.round(currentPositionData.posY || 0)
+        };
+    }
+
+    function buildToggleApplyInfo(isExportEnabled) {
+        if (!currentLayerInfo) return null;
+
+        return {
+            moduleName: currentLayerInfo.moduleName || currentLayerInfo.docName || "",
+            baseName: currentLayerInfo.baseName || currentLayerInfo.fullName || "",
+            width: parseInt(currentLayerInfo.width, 10) || parseInt(currentLayerInfo.realWidth, 10) || 0,
+            height: parseInt(currentLayerInfo.height, 10) || parseInt(currentLayerInfo.realHeight, 10) || 0,
+            outputType: currentLayerInfo.outputType || "atlas",
+            compType: currentLayerInfo.compType || "image",
+            isExport: !!isExportEnabled,
+            sliceSuffix: currentLayerInfo.sliceSuffix || "0,0,0,0",
+            posX: parseInt(currentLayerInfo.posX, 10) || 0,
+            posY: parseInt(currentLayerInfo.posY, 10) || 0
+        };
+    }
+
+    function getSavedFrameSize() {
+        return {
+            width: parseInt((currentLayerInfo && currentLayerInfo.width), 10) || parseInt((currentLayerInfo && currentLayerInfo.realWidth), 10) || 0,
+            height: parseInt((currentLayerInfo && currentLayerInfo.height), 10) || parseInt((currentLayerInfo && currentLayerInfo.realHeight), 10) || 0
+        };
+    }
+
+    function getSavedPosition() {
+        if (!currentLayerInfo) return { x: 0, y: 0 };
+        var savedFrame = getSavedFrameSize();
+        var imgW = parseInt(currentLayerInfo.realWidth, 10) || 0;
+        var imgH = parseInt(currentLayerInfo.realHeight, 10) || 0;
+        if (!currentLayerInfo.hasCustomPosition) {
+            return {
+                x: Math.round((savedFrame.width - imgW) / 2),
+                y: Math.round((savedFrame.height - imgH) / 2)
+            };
+        }
+        return {
+            x: parseInt(currentLayerInfo.posX, 10) || 0,
+            y: parseInt(currentLayerInfo.posY, 10) || 0
+        };
+    }
+
+    function getCurrentDraftState() {
+        if (!currentLayerInfo) return null;
+        var outputType = uiNaming.output.value === "atlas" ? ("atlas:" + (uiNaming.atlasPrefix.value || "common")) : uiNaming.output.value;
+        return {
+            moduleName: uiNaming.root.value.trim(),
+            baseName: uiNaming.base.value.trim(),
+            outputType: outputType,
+            compType: uiNaming.comp.value,
+            width: parseInt(uiNaming.w.value, 10) || currentLayerInfo.realWidth,
+            height: parseInt(uiNaming.h.value, 10) || currentLayerInfo.realHeight,
+            posX: Math.round(currentPositionData.posX || 0),
+            posY: Math.round(currentPositionData.posY || 0)
+        };
+    }
+
+    function getSavedDraftState() {
+        if (!currentLayerInfo) return null;
+        var savedPos = getSavedPosition();
+        var savedFrame = getSavedFrameSize();
+        return {
+            moduleName: currentLayerInfo.moduleName || currentLayerInfo.docName || "",
+            baseName: currentLayerInfo.baseName || "",
+            outputType: currentLayerInfo.outputType || "atlas",
+            compType: currentLayerInfo.compType || "image",
+            width: savedFrame.width,
+            height: savedFrame.height,
+            posX: savedPos.x,
+            posY: savedPos.y
+        };
+    }
+
+    function isDraftDirty() {
+        var currentState = getCurrentDraftState();
+        var savedState = getSavedDraftState();
+        if (!currentState || !savedState) return false;
+        return JSON.stringify(currentState) !== JSON.stringify(savedState);
+    }
+
+    function updateSaveButtonState(forceSaving) {
+        if (!uiNaming.apply) return;
+        uiNaming.apply.classList.remove("is-clean", "is-dirty", "is-saving");
+
+        if (forceSaving) {
+            uiNaming.apply.classList.add("is-saving");
+            uiNaming.apply.disabled = true;
+            return;
+        }
+
+        if (isDraftDirty()) {
+            uiNaming.apply.classList.add("is-dirty");
+            uiNaming.apply.disabled = false;
+        } else {
+            uiNaming.apply.classList.add("is-clean");
+            uiNaming.apply.disabled = true;
+        }
+    }
+
+    function renderRecentBaseNames() {
+        if (!uiNaming.baseHistory) return;
+        uiNaming.baseHistory.innerHTML = '<option value="">最近名称</option>';
+        recentBaseNames.forEach(function(name) {
+            var option = document.createElement("option");
+            option.value = name;
+            option.textContent = name;
+            uiNaming.baseHistory.appendChild(option);
+        });
+    }
+
+    function pushRecentBaseName(name) {
+        var normalized = String(name || "").trim();
+        if (!normalized) return;
+        recentBaseNames = recentBaseNames.filter(function(item) {
+            return item !== normalized;
+        });
+        recentBaseNames.unshift(normalized);
+        recentBaseNames = recentBaseNames.slice(0, 10);
+        localStorage.setItem("UILink_RecentBaseNames", JSON.stringify(recentBaseNames));
+        renderRecentBaseNames();
+    }
+
+    function getEffectiveFrameSize() {
+        var frameW = parseInt(uiNaming.w.value, 10) || (currentLayerInfo && currentLayerInfo.realWidth) || currentPositionData.imgW || 0;
+        var frameH = parseInt(uiNaming.h.value, 10) || (currentLayerInfo && currentLayerInfo.realHeight) || currentPositionData.imgH || 0;
+        return {
+            w: Math.max(1, frameW),
+            h: Math.max(1, frameH)
+        };
+    }
+
+    function clampPositionData() {
+        var frame = getEffectiveFrameSize();
+        currentPositionData.frameW = frame.w;
+        currentPositionData.frameH = frame.h;
+
+        var minX = Math.min(0, frame.w - currentPositionData.imgW);
+        var maxX = Math.max(0, frame.w - currentPositionData.imgW);
+        var minY = Math.min(0, frame.h - currentPositionData.imgH);
+        var maxY = Math.max(0, frame.h - currentPositionData.imgH);
+
+        currentPositionData.posX = Math.max(minX, Math.min(maxX, Math.round(currentPositionData.posX || 0)));
+        currentPositionData.posY = Math.max(minY, Math.min(maxY, Math.round(currentPositionData.posY || 0)));
+    }
+
+    function applyCenterSnap() {
+        var centerX = Math.round((currentPositionData.frameW - currentPositionData.imgW) / 2);
+        var centerY = Math.round((currentPositionData.frameH - currentPositionData.imgH) / 2);
+        var snapThreshold = 6;
+        currentPositionData.snapX = false;
+        currentPositionData.snapY = false;
+
+        if (Math.abs(currentPositionData.posX - centerX) <= snapThreshold) {
+            currentPositionData.posX = centerX;
+            currentPositionData.snapX = true;
+        }
+        if (Math.abs(currentPositionData.posY - centerY) <= snapThreshold) {
+            currentPositionData.posY = centerY;
+            currentPositionData.snapY = true;
+        }
+    }
+
+    function updatePositionPreviewInfo() {
+        if (!uiNaming.positionInfo) return;
+        uiNaming.positionInfo.innerText = "位置: (" + Math.round(currentPositionData.posX || 0) + ", " + Math.round(currentPositionData.posY || 0) + ")";
+    }
+
+    function renderPositionPreview() {
+        if (!uiNaming.positionStage || !uiNaming.positionFrame || !uiNaming.positionImage || !uiNaming.positionEmpty) return;
+
+        var frame = getEffectiveFrameSize();
+        currentPositionData.frameW = frame.w;
+        currentPositionData.frameH = frame.h;
+
+        if (!currentPositionData.hasImage || !currentPositionData.imgW || !currentPositionData.imgH) {
+            uiNaming.positionFrame.style.display = "none";
+            uiNaming.positionEmpty.style.display = "flex";
+            if (uiNaming.positionGuideX) uiNaming.positionGuideX.classList.remove("active");
+            if (uiNaming.positionGuideY) uiNaming.positionGuideY.classList.remove("active");
+            updatePositionPreviewInfo();
+            updateSaveButtonState();
+            return;
+        }
+
+        clampPositionData();
+        applyCenterSnap();
+
+        var stageRect = uiNaming.positionStage.getBoundingClientRect();
+        var stageW = Math.max(80, Math.round(stageRect.width) - 16);
+        var stageH = Math.max(80, Math.round(stageRect.height) - 16);
+        var scale = Math.min(stageW / frame.w, stageH / frame.h);
+        if (!isFinite(scale) || scale <= 0) scale = 1;
+
+        var displayFrameW = Math.max(1, Math.round(frame.w * scale));
+        var displayFrameH = Math.max(1, Math.round(frame.h * scale));
+        var displayImgW = Math.max(1, Math.round(currentPositionData.imgW * scale));
+        var displayImgH = Math.max(1, Math.round(currentPositionData.imgH * scale));
+
+        uiNaming.positionFrame.style.display = "block";
+        uiNaming.positionEmpty.style.display = "none";
+        uiNaming.positionFrame.style.width = displayFrameW + "px";
+        uiNaming.positionFrame.style.height = displayFrameH + "px";
+        uiNaming.positionFrame.setAttribute("data-scale", String(scale));
+
+        uiNaming.positionImage.style.width = displayImgW + "px";
+        uiNaming.positionImage.style.height = displayImgH + "px";
+        uiNaming.positionImage.style.left = Math.round(currentPositionData.posX * scale) + "px";
+        uiNaming.positionImage.style.top = Math.round(currentPositionData.posY * scale) + "px";
+        if (uiNaming.positionGuideX) uiNaming.positionGuideX.classList.toggle("active", !!currentPositionData.snapX);
+        if (uiNaming.positionGuideY) uiNaming.positionGuideY.classList.toggle("active", !!currentPositionData.snapY);
+
+        updatePositionPreviewInfo();
+        updateSaveButtonState();
+    }
+
+    function centerPositionPreview() {
+        var frame = getEffectiveFrameSize();
+        currentPositionData.frameW = frame.w;
+        currentPositionData.frameH = frame.h;
+        currentPositionData.posX = Math.round((frame.w - currentPositionData.imgW) / 2);
+        currentPositionData.posY = Math.round((frame.h - currentPositionData.imgH) / 2);
+        clampPositionData();
+        renderPositionPreview();
+    }
+
+    function refreshPositionAfterSizeEdit() {
+        var wasCenteredX = currentPositionData.posX === Math.round((currentPositionData.frameW - currentPositionData.imgW) / 2);
+        var wasCenteredY = currentPositionData.posY === Math.round((currentPositionData.frameH - currentPositionData.imgH) / 2);
+        if ((currentLayerInfo && !currentLayerInfo.hasCustomPosition && wasCenteredX && wasCenteredY) || (wasCenteredX && wasCenteredY && !isDraggingPosition)) {
+            centerPositionPreview();
+        } else {
+            renderPositionPreview();
+        }
+    }
+
+    function loadPositionPreview(forceReload) {
+        if (!currentLayerInfo || !uiNaming.positionImage) {
+            currentPositionData.hasImage = false;
+            renderPositionPreview();
+            return;
+        }
+
+        currentPositionData.imgW = parseInt(currentLayerInfo.realWidth, 10) || 0;
+        currentPositionData.imgH = parseInt(currentLayerInfo.realHeight, 10) || 0;
+        currentPositionData.posX = parseInt(currentLayerInfo.posX, 10) || 0;
+        currentPositionData.posY = parseInt(currentLayerInfo.posY, 10) || 0;
+        if (!currentLayerInfo.hasCustomPosition) {
+            currentPositionData.posX = Math.round((getEffectiveFrameSize().w - currentPositionData.imgW) / 2);
+            currentPositionData.posY = Math.round((getEffectiveFrameSize().h - currentPositionData.imgH) / 2);
+        }
+        currentPositionData.hasImage = false;
+        renderPositionPreview();
+
+        if (!forceReload && currentPositionData.previewPath) {
+            currentPositionData.hasImage = true;
+            renderPositionPreview();
+            return;
+        }
+
+        csInterface.evalScript("getActiveLayerPreview()", function(result) {
+            if (!result || result.indexOf("ERROR") === 0) {
+                currentPositionData.hasImage = false;
+                renderPositionPreview();
+                return;
+            }
+
+            try {
+                var data = JSON.parse(result);
+                currentPositionData.previewPath = data.path || "";
+                currentPositionData.imgW = parseInt(data.width, 10) || currentPositionData.imgW;
+                currentPositionData.imgH = parseInt(data.height, 10) || currentPositionData.imgH;
+                currentPositionData.hasImage = !!currentPositionData.previewPath;
+
+                if (currentPositionData.previewPath) {
+                    var safePath = currentPositionData.previewPath.replace(/\\/g, "/");
+                    uiNaming.positionImage.onload = function() {
+                        renderPositionPreview();
+                    };
+                    uiNaming.positionImage.src = "file:///" + safePath + "?t=" + new Date().getTime();
+                } else {
+                    renderPositionPreview();
+                }
+            } catch (e) {
+                currentPositionData.hasImage = false;
+                renderPositionPreview();
+            }
+        });
     }
 
     // 手动保存/锁定模块名
@@ -562,12 +1104,25 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 
     // 监听输入变化
+    renderRecentBaseNames();
+
+    if (uiNaming.baseHistory) {
+        uiNaming.baseHistory.addEventListener("change", function() {
+            if (!this.value) return;
+            uiNaming.base.value = this.value;
+            updatePreview();
+        });
+    }
+
     [uiNaming.root, uiNaming.base, uiNaming.output, uiNaming.comp, uiNaming.exportChk, uiNaming.w, uiNaming.h, uiNaming.atlasPrefix].forEach(function(el) {
         if (!el) return;
         el.addEventListener("input", function() {
             updatePreview();
-            if ((el === uiNaming.w || el === uiNaming.h) && typeof window.refreshCanvasDimensions === "function") {
-                window.refreshCanvasDimensions();
+            if (el === uiNaming.w || el === uiNaming.h) {
+                if (typeof window.refreshCanvasDimensions === "function") {
+                    window.refreshCanvasDimensions();
+                }
+                refreshPositionAfterSizeEdit();
             }
         });
         el.addEventListener("change", function() {
@@ -575,8 +1130,11 @@ document.addEventListener("DOMContentLoaded", function() {
                 uiNaming.groupPrefix.style.display = (this.value === "atlas") ? "flex" : "none";
             }
             updatePreview();
-            if ((el === uiNaming.w || el === uiNaming.h) && typeof window.refreshCanvasDimensions === "function") {
-                window.refreshCanvasDimensions();
+            if (el === uiNaming.w || el === uiNaming.h) {
+                if (typeof window.refreshCanvasDimensions === "function") {
+                    window.refreshCanvasDimensions();
+                }
+                refreshPositionAfterSizeEdit();
             }
         });
     });
@@ -629,6 +1187,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 isExport: uiNaming.exportChk.checked,
                 sliceSuffix: currentLayerInfo.sliceSuffix || "0,0,0,0"
             };
+            applyInfo = buildRenameApplyInfo();
 
             if (!applyInfo.baseName) {
                 setStatus("基础名称不能为空！", "error");
@@ -636,6 +1195,7 @@ document.addEventListener("DOMContentLoaded", function() {
             }
 
             setStatus("正在应用命名规则...", "warning");
+            updateSaveButtonState(true);
             var jsonStr = JSON.stringify(applyInfo);
             // 对 JSON 字符串进行简单的转义，防止单引号破坏 evalScript
             var escapedJson = jsonStr.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
@@ -643,13 +1203,29 @@ document.addEventListener("DOMContentLoaded", function() {
             csInterface.evalScript("applyLayerRename('" + escapedJson + "')", function(res) {
                 if (res.indexOf("ERROR") === 0) {
                     setStatus(res, "error");
+                    updateSaveButtonState();
                     logMsg("重命名失败: " + res);
                 } else {
                     setStatus("重命名成功！", "");
                     // 重命名成功后自动记忆当前的模块名
                     localStorage.setItem("UILink_LastModuleName", applyInfo.moduleName);
+                    pushRecentBaseName(applyInfo.baseName);
+                    if (currentLayerInfo) {
+                        currentLayerInfo.moduleName = applyInfo.moduleName;
+                        currentLayerInfo.baseName = applyInfo.baseName;
+                        currentLayerInfo.width = applyInfo.width;
+                        currentLayerInfo.height = applyInfo.height;
+                        currentLayerInfo.outputType = applyInfo.outputType;
+                        currentLayerInfo.compType = applyInfo.compType;
+                        currentLayerInfo.isExport = applyInfo.isExport;
+                        currentLayerInfo.posX = applyInfo.posX;
+                        currentLayerInfo.posY = applyInfo.posY;
+                        currentLayerInfo.hasCustomPosition = true;
+                        currentLayerInfo.hasMeta = true;
+                    }
                     lastLayerNameForSync = res;
                     updatePreview();
+                    renderPositionPreview();
                     logMsg("已重命名为: " + res);
                 }
             });
@@ -1340,7 +1916,41 @@ document.addEventListener("DOMContentLoaded", function() {
     
     // 监听导出控制开关，变更即更新命名预览
     document.getElementById("chkExportEnable").addEventListener("change", function() {
-        updateNamingPreview();
+        var checkbox = this;
+        var nextState = checkbox.checked;
+        var previousState = !nextState;
+        var toggleInfo = buildToggleApplyInfo(nextState);
+
+        updatePreview();
+
+        if (!toggleInfo || !toggleInfo.baseName) {
+            checkbox.checked = previousState;
+            updatePreview();
+            setStatus("请先在 PS 中选中一个有效图层", "error");
+            return;
+        }
+
+        setStatus(nextState ? "正在开启导出..." : "正在关闭导出...", "warning");
+        var jsonStr = JSON.stringify(toggleInfo);
+        var escapedJson = jsonStr.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+
+        csInterface.evalScript("setActiveLayerExportFlag('" + escapedJson + "')", function(res) {
+            if (res.indexOf("ERROR") === 0) {
+                checkbox.checked = previousState;
+                updatePreview();
+                setStatus(res, "error");
+                logMsg("导出状态更新失败: " + res);
+                return;
+            }
+
+            if (currentLayerInfo) {
+                currentLayerInfo.isExport = nextState;
+                currentLayerInfo.hasMeta = true;
+            }
+            lastLayerNameForSync = "";
+            setStatus(nextState ? "已开启导出，立即生效，无需保存。" : "已关闭导出，立即生效，无需保存。", "");
+            logMsg(nextState ? "导出已开启（即时生效）" : "导出已关闭（即时生效）");
+        });
     });
 
     // 尺寸重置功能
@@ -1348,7 +1958,8 @@ document.addEventListener("DOMContentLoaded", function() {
         if (!currentLayerInfo) return;
         uiNaming.w.value = currentLayerInfo.realWidth;
         uiNaming.h.value = currentLayerInfo.realHeight;
-        updateNamingPreview();
+        updatePreview();
+        refreshPositionAfterSizeEdit();
     });
 
     // --- 预设尺寸管理逻辑 ---
@@ -1374,7 +1985,8 @@ document.addEventListener("DOMContentLoaded", function() {
             label.onclick = function() {
                 uiNaming.w.value = p.w;
                 uiNaming.h.value = p.h;
-                updateNamingPreview();
+                updatePreview();
+                refreshPositionAfterSizeEdit();
                 presetMenu.style.display = "none";
             };
 
@@ -1570,6 +2182,893 @@ document.addEventListener("DOMContentLoaded", function() {
     // ==========================================
     // 5. Setting 页签: 强制检查更新
     // ==========================================
+    var btnMakeClearTest = document.getElementById("btnMakeClearTest");
+    if (btnMakeClearTest) {
+        btnMakeClearTest.addEventListener("click", function() {
+            if (btnMakeClearTest.disabled) return;
+            btnMakeClearTest.disabled = true;
+
+            var fs = window.cep.fs;
+            var toolsDir = csInterface.getSystemPath(SystemPath.EXTENSION) + "\\tools\\realesrgan";
+            var exePath = toolsDir + "\\realesrgan-ncnn-vulkan.exe";
+            var modelsDir = toolsDir + "\\models";
+            var cmdPath = "C:\\Windows\\System32\\cmd.exe";
+
+            function unlock() {
+                btnMakeClearTest.disabled = false;
+            }
+
+            function fail(statusText, logText) {
+                setStatus(statusText, "error");
+                logMsg(logText || ("[Pipeline] ERROR: " + statusText));
+                unlock();
+            }
+
+            function readBase64File(filePath, retries, callback) {
+                var readRes = fs.readFile(filePath, window.cep.encoding.Base64);
+                if (readRes.err === fs.NO_ERROR && readRes.data) {
+                    callback(null, readRes.data);
+                    return;
+                }
+
+                if (retries > 0) {
+                    setTimeout(function() {
+                        readBase64File(filePath, retries - 1, callback);
+                    }, 300);
+                    return;
+                }
+
+                callback(readRes.err || "EMPTY_FILE");
+            }
+
+            function loadPngImage(filePath, label, retries, callback) {
+                readBase64File(filePath, retries, function(readErr, base64Data) {
+                    if (readErr) {
+                        callback("cannot read " + label + ": " + filePath + " (err=" + readErr + ")");
+                        return;
+                    }
+
+                    var img = new Image();
+                    var settled = false;
+                    var timer = setTimeout(function() {
+                        if (settled) return;
+                        settled = true;
+                        callback(label + " decode timeout");
+                    }, 15000);
+
+                    function done(err, result) {
+                        if (settled) return;
+                        settled = true;
+                        clearTimeout(timer);
+                        callback(err, result);
+                    }
+
+                    img.onload = function() {
+                        done(null, img);
+                    };
+                    img.onerror = function() {
+                        done(label + " decode failed");
+                    };
+                    img.src = "data:image/png;base64," + base64Data;
+                });
+            }
+
+            function writeImageDataToFile(imageData, width, height, filePath, callback) {
+                var canvas = document.createElement("canvas");
+                canvas.width = width;
+                canvas.height = height;
+                canvas.getContext("2d").putImageData(imageData, 0, 0);
+
+                var base64Data = canvas.toDataURL("image/png").replace(/^data:image\/png;base64,/, "");
+                var writeRes = fs.writeFile(filePath, base64Data, window.cep.encoding.Base64);
+                if (writeRes.err === fs.NO_ERROR) {
+                    callback(null);
+                    return;
+                }
+
+                callback(writeRes.err);
+            }
+
+            function waitForOutputFile(filePath, retries, callback) {
+                readBase64File(filePath, 0, function(err, data) {
+                    if (!err && data) {
+                        callback(null);
+                        return;
+                    }
+
+                    if (retries > 0) {
+                        setTimeout(function() {
+                            waitForOutputFile(filePath, retries - 1, callback);
+                        }, 400);
+                        return;
+                    }
+
+                    callback(err || "FILE_NOT_READY");
+                });
+            }
+
+            function runRealEsrgan(rgbPath, rgbOutPath, callback) {
+                logMsg("[Pipeline] RGB split done; launching Real-ESRGAN...");
+                logMsg("> " + exePath + " -i " + rgbPath + " -o " + rgbOutPath + " -n realesr-animevideov3 -s 2 -m " + modelsDir);
+                setStatus("Step 3: running local ESRGAN...", "warning");
+
+                var procResult = window.cep.process.createProcess(
+                    exePath,
+                    "-i", rgbPath,
+                    "-o", rgbOutPath,
+                    "-n", "realesr-animevideov3",
+                    "-s", "2",
+                    "-m", modelsDir
+                );
+
+                if (procResult.err !== 0) {
+                    var cmdLine = '""' + exePath + '" -i "' + rgbPath + '" -o "' + rgbOutPath + '" -n realesr-animevideov3 -s 2 -m "' + modelsDir + '""';
+                    logMsg("[Pipeline] direct launch failed, fallback to cmd.exe");
+                    logMsg("> " + cmdPath + " /c " + cmdLine);
+                    procResult = window.cep.process.createProcess(cmdPath, "/c", cmdLine);
+                }
+
+                if (procResult.err !== 0) {
+                    callback("ESRGAN launch failed: " + procResult.err);
+                    return;
+                }
+
+                var pid = procResult.data;
+                var tickCount = 0;
+                var checkInterval = setInterval(function() {
+                    var runningRes = window.cep.process.isRunning(pid);
+                    if (runningRes.data === false) {
+                        clearInterval(checkInterval);
+                        waitForOutputFile(rgbOutPath, 120, function(waitErr) {
+                            if (waitErr) {
+                                callback("ESRGAN finished but output file is missing: " + rgbOutPath + " (err=" + waitErr + ")");
+                                return;
+                            }
+                            callback(null);
+                        });
+                        return;
+                    }
+
+                    tickCount++;
+                    if (tickCount % 4 === 0) {
+                        logMsg("[Pipeline] local ESRGAN still running...");
+                    }
+                }, 500);
+            }
+
+            function importToPhotoshop(finalPath) {
+                var safePath = finalPath.replace(/\\/g, "/").replace(/'/g, "\\'");
+                csInterface.evalScript("importFromPipeline('" + safePath + "')", function(importRes) {
+                    unlock();
+                    importRes = String(importRes || "").replace(/\r|\n/g, "").trim();
+
+                    if (importRes.indexOf("ERROR") === 0) {
+                        setStatus(importRes, "error");
+                        logMsg("[Pipeline] Photoshop import failed: " + importRes);
+                        return;
+                    }
+
+                    setStatus("Pipeline finished successfully.", "");
+                    logMsg("[Pipeline] done");
+                });
+            }
+
+            if (fs.stat(exePath).err !== fs.NO_ERROR) {
+                fail("Local ESRGAN binary not found.", "[Pipeline] missing binary: " + exePath);
+                return;
+            }
+
+            if (fs.stat(modelsDir).err !== fs.NO_ERROR) {
+                fail("Local ESRGAN models folder not found.", "[Pipeline] missing models dir: " + modelsDir);
+                return;
+            }
+
+            logMsg("[Pipeline] button clicked");
+            setStatus("Step 1: exporting active layer...", "warning");
+
+            csInterface.evalScript("exportLayerForPipeline()", function(sourcePath) {
+                sourcePath = String(sourcePath || "").replace(/\r|\n/g, "").trim();
+                if (!sourcePath || sourcePath.indexOf("ERROR") === 0) {
+                    fail("Export active layer failed.", "[Pipeline] Photoshop export failed: " + sourcePath);
+                    return;
+                }
+
+                logMsg("[Pipeline] source exported: " + sourcePath);
+                loadPngImage(sourcePath, "source image", 3, function(sourceErr, img) {
+                    if (sourceErr) {
+                        fail("Loading exported image failed.", "[Pipeline] " + sourceErr);
+                        return;
+                    }
+
+                    var w = img.width;
+                    var h = img.height;
+                    if (!w || !h) {
+                        fail("Source image size is invalid.", "[Pipeline] invalid source size: " + w + "x" + h);
+                        return;
+                    }
+
+                    var sourceCanvas = document.createElement("canvas");
+                    sourceCanvas.width = w;
+                    sourceCanvas.height = h;
+
+                    var sourceCtx = sourceCanvas.getContext("2d");
+                    sourceCtx.drawImage(img, 0, 0);
+
+                    var srcData = sourceCtx.getImageData(0, 0, w, h);
+                    var rgbData = sourceCtx.createImageData(w, h);
+                    var alphaData = sourceCtx.createImageData(w, h);
+
+                    for (var i = 0; i < srcData.data.length; i += 4) {
+                        rgbData.data[i] = srcData.data[i];
+                        rgbData.data[i + 1] = srcData.data[i + 1];
+                        rgbData.data[i + 2] = srcData.data[i + 2];
+                        rgbData.data[i + 3] = 255;
+
+                        var alphaValue = srcData.data[i + 3];
+                        alphaData.data[i] = alphaValue;
+                        alphaData.data[i + 1] = alphaValue;
+                        alphaData.data[i + 2] = alphaValue;
+                        alphaData.data[i + 3] = 255;
+                    }
+
+                    var slashIndex = Math.max(sourcePath.lastIndexOf("\\"), sourcePath.lastIndexOf("/"));
+                    var tempDir = sourcePath.substring(0, slashIndex);
+                    var rgbPath = tempDir + "\\uilink_rgb.png";
+                    var alphaPath = tempDir + "\\uilink_alpha.png";
+                    var rgbOutPath = tempDir + "\\uilink_rgb_out.png";
+                    var finalPath = tempDir + "\\uilink_pipeline_final.png";
+
+                    logMsg("[Pipeline] writing RGB and alpha temp files...");
+                    writeImageDataToFile(rgbData, w, h, rgbPath, function(rgbErr) {
+                        if (rgbErr) {
+                            fail("Saving RGB temp file failed.", "[Pipeline] RGB temp write failed: " + rgbErr);
+                            return;
+                        }
+
+                        writeImageDataToFile(alphaData, w, h, alphaPath, function(alphaErr) {
+                            if (alphaErr) {
+                                fail("Saving alpha temp file failed.", "[Pipeline] alpha temp write failed: " + alphaErr);
+                                return;
+                            }
+
+                            runRealEsrgan(rgbPath, rgbOutPath, function(esrganErr) {
+                                if (esrganErr) {
+                                    fail("Local ESRGAN failed.", "[Pipeline] " + esrganErr);
+                                    return;
+                                }
+
+                                logMsg("[Pipeline] ESRGAN finished; restoring alpha...");
+                                setStatus("Step 4: merging alpha and postprocess...", "warning");
+
+                                loadPngImage(rgbOutPath, "upscaled RGB image", 5, function(outErr, outImg) {
+                                    if (outErr) {
+                                        fail("Loading ESRGAN output failed.", "[Pipeline] " + outErr);
+                                        return;
+                                    }
+
+                                    loadPngImage(alphaPath, "alpha image", 3, function(alphaLoadErr, alphaImg) {
+                                        if (alphaLoadErr) {
+                                            fail("Loading alpha image failed.", "[Pipeline] " + alphaLoadErr);
+                                            return;
+                                        }
+
+                                        var outW = outImg.width;
+                                        var outH = outImg.height;
+
+                                        var outCanvas = document.createElement("canvas");
+                                        outCanvas.width = outW;
+                                        outCanvas.height = outH;
+
+                                        var outCtx = outCanvas.getContext("2d");
+                                        outCtx.drawImage(outImg, 0, 0);
+                                        var outImgData = outCtx.getImageData(0, 0, outW, outH);
+
+                                        var alphaCanvas = document.createElement("canvas");
+                                        alphaCanvas.width = outW;
+                                        alphaCanvas.height = outH;
+
+                                        var alphaCtx = alphaCanvas.getContext("2d");
+                                        alphaCtx.imageSmoothingEnabled = true;
+                                        alphaCtx.imageSmoothingQuality = "high";
+                                        alphaCtx.drawImage(alphaImg, 0, 0, outW, outH);
+
+                                        var scaledAlpha = alphaCtx.getImageData(0, 0, outW, outH);
+                                        var finalData = outCtx.createImageData(outW, outH);
+
+                                        for (var j = 0; j < outImgData.data.length; j += 4) {
+                                            finalData.data[j] = outImgData.data[j];
+                                            finalData.data[j + 1] = outImgData.data[j + 1];
+                                            finalData.data[j + 2] = outImgData.data[j + 2];
+                                            finalData.data[j + 3] = scaledAlpha.data[j];
+                                        }
+
+                                        outCtx.putImageData(finalData, 0, 0);
+
+                                        var finalBase64 = outCanvas.toDataURL("image/png").replace(/^data:image\/png;base64,/, "");
+                                        var finalWriteRes = fs.writeFile(finalPath, finalBase64, window.cep.encoding.Base64);
+                                        if (finalWriteRes.err !== fs.NO_ERROR) {
+                                            fail("Writing merged output failed.", "[Pipeline] merged output write failed: " + finalWriteRes.err);
+                                            return;
+                                        }
+
+                                        logMsg("[Pipeline] merged PNG ready; importing back to Photoshop...");
+                                        importToPhotoshop(finalPath);
+                                    });
+                                });
+                            });
+                        });
+                    });
+                });
+            });
+        });
+    }
+
+    var aiApiUrlInput = document.getElementById("aiApiUrl");
+    var aiApiKeyInput = document.getElementById("aiApiKey");
+    var aiModelInput = document.getElementById("aiModel");
+    var aiPromptInput = document.getElementById("aiPromptInput");
+    var btnMakeClear = document.getElementById("btnMakeClear");
+    var btnFetchModels = document.getElementById("btnFetchModels");
+    var defaultAiPrompt = "Enhance this exact UI icon into a higher-resolution version. Preserve the original composition, silhouette, proportions, spacing, color layout, and semantic identity. Do not redesign, restyle, invent new details, add new objects, or change the icon. Keep the result as the same icon, only cleaner, sharper, and higher resolution. Return a single edited image.";
+
+    function loadAiSettings() {
+        if (aiApiUrlInput) aiApiUrlInput.value = localStorage.getItem("UILink_AI_ApiUrl") || "";
+        if (aiApiKeyInput) aiApiKeyInput.value = localStorage.getItem("UILink_AI_ApiKey") || "";
+        if (aiModelInput) aiModelInput.value = localStorage.getItem("UILink_AI_Model") || "";
+        if (aiPromptInput) aiPromptInput.value = localStorage.getItem("UILink_AI_Prompt") || defaultAiPrompt;
+    }
+
+    function bindAiSettingPersistence(inputEl, storageKey) {
+        if (!inputEl) return;
+        inputEl.addEventListener("input", function() {
+            localStorage.setItem(storageKey, inputEl.value || "");
+        });
+        inputEl.addEventListener("change", function() {
+            localStorage.setItem(storageKey, inputEl.value || "");
+        });
+    }
+
+    function normalizeAiApiUrl(url) {
+        var normalized = String(url || "").trim();
+        if (!normalized) return "";
+        if (/generativelanguage\.googleapis\.com/i.test(normalized)) return normalized.replace(/\/$/, "");
+        if (/\/chat\/completions\/?$/i.test(normalized)) return normalized;
+        if (/\/v1\/?$/i.test(normalized)) return normalized.replace(/\/?$/i, "/chat/completions");
+        return normalized.replace(/\/?$/i, "/chat/completions");
+    }
+
+    function buildAuthHeader(apiKey) {
+        var key = String(apiKey || "").trim();
+        if (!key) return "";
+        return /^Bearer\s+/i.test(key) ? key : ("Bearer " + key);
+    }
+
+    function isGeminiNativeApiUrl(apiUrl) {
+        return /generativelanguage\.googleapis\.com/i.test(apiUrl || "") && !/\/chat\/completions\/?$/i.test(apiUrl || "");
+    }
+
+    function buildGeminiNativeUrl(apiUrl, model) {
+        var normalized = String(apiUrl || "").replace(/\/$/, "");
+        if (/\/models\/[^\/]+:generateContent$/i.test(normalized)) return normalized;
+        if (/\/models\/[^\/]+$/i.test(normalized)) return normalized + ":generateContent";
+        return normalized + "/models/" + encodeURIComponent(model) + ":generateContent";
+    }
+
+    function buildGeminiApiKey(apiKey) {
+        return String(apiKey || "").trim().replace(/^Bearer\s+/i, "");
+    }
+
+    function normalizeBase64Payload(base64Text) {
+        var normalized = String(base64Text || "").replace(/\s+/g, "");
+        var mod = normalized.length % 4;
+        if (mod === 2) normalized += "==";
+        else if (mod === 3) normalized += "=";
+        else if (mod === 1) normalized = normalized.slice(0, normalized.length - 1);
+        return normalized;
+    }
+
+    function buildModelListRequest(apiUrl, apiKey) {
+        var normalized = String(apiUrl || "").trim();
+        if (!normalized) return null;
+
+        if (isGeminiNativeApiUrl(normalized)) {
+            return {
+                mode: "gemini-native",
+                url: normalized.replace(/\/$/, "") + "/models?pageSize=1000",
+                headers: {
+                    "x-goog-api-key": buildGeminiApiKey(apiKey)
+                }
+            };
+        }
+
+        var baseUrl = normalized;
+        if (/\/chat\/completions\/?$/i.test(baseUrl)) {
+            baseUrl = baseUrl.replace(/\/chat\/completions\/?$/i, "");
+        }
+        if (/\/responses\/?$/i.test(baseUrl)) {
+            baseUrl = baseUrl.replace(/\/responses\/?$/i, "");
+        }
+        if (/\/completions\/?$/i.test(baseUrl)) {
+            baseUrl = baseUrl.replace(/\/completions\/?$/i, "");
+        }
+
+        return {
+            mode: "openai-compatible",
+            url: baseUrl.replace(/\/$/, "") + "/models",
+            headers: {
+                "Authorization": buildAuthHeader(apiKey)
+            }
+        };
+    }
+
+    function normalizeGeminiModelName(modelName) {
+        return String(modelName || "").replace(/^models\//i, "");
+    }
+
+    function scoreGeminiModel(modelName) {
+        var name = normalizeGeminiModelName(modelName).toLowerCase();
+        var score = 0;
+        if (name.indexOf("image") !== -1) score += 100;
+        if (name.indexOf("imagen") !== -1) score += 80;
+        if (name.indexOf("preview") !== -1) score += 10;
+        if (name.indexOf("flash") !== -1) score += 5;
+        if (name.indexOf("exp") !== -1) score -= 5;
+        return score;
+    }
+
+    function setAiModelOptions(modelNames) {
+        var selectEl = document.getElementById("aiModelSelect");
+        if (!selectEl) return;
+
+        selectEl.innerHTML = "";
+        if (!modelNames || !modelNames.length) {
+            selectEl.style.display = "none";
+            return;
+        }
+
+        modelNames.forEach(function(name) {
+            var option = document.createElement("option");
+            option.value = normalizeGeminiModelName(name);
+            option.textContent = normalizeGeminiModelName(name);
+            selectEl.appendChild(option);
+        });
+
+        if (aiModelInput) {
+            var current = normalizeGeminiModelName(aiModelInput.value || "");
+            var matched = modelNames.some(function(name) {
+                return normalizeGeminiModelName(name) === current;
+            });
+            if (matched) {
+                selectEl.value = current;
+            } else {
+                selectEl.selectedIndex = 0;
+                aiModelInput.value = selectEl.value;
+                localStorage.setItem("UILink_AI_Model", aiModelInput.value || "");
+            }
+        }
+
+        selectEl.style.display = "block";
+    }
+
+    function parseModelListResponse(responseJson, mode) {
+        var modelNames = [];
+
+        if (mode === "gemini-native") {
+            var geminiModels = Array.isArray(responseJson.models) ? responseJson.models : [];
+            modelNames = geminiModels.filter(function(modelInfo) {
+                var methods = modelInfo.supportedGenerationMethods || [];
+                return methods.indexOf("generateContent") !== -1;
+            }).map(function(modelInfo) {
+                return normalizeGeminiModelName(modelInfo.name || modelInfo.baseModelId || "");
+            }).filter(function(name) {
+                return !!name;
+            });
+        } else {
+            var openaiModels = Array.isArray(responseJson.data) ? responseJson.data : [];
+            modelNames = openaiModels.map(function(modelInfo) {
+                return String(modelInfo.id || modelInfo.name || "").trim();
+            }).filter(function(name) {
+                return !!name;
+            });
+        }
+
+        modelNames.sort(function(a, b) {
+            var diff = scoreGeminiModel(b) - scoreGeminiModel(a);
+            if (diff !== 0) return diff;
+            return a.localeCompare(b);
+        });
+
+        return modelNames;
+    }
+
+    function extractImageResult(responseJson) {
+        function fromValue(value) {
+            if (!value) return null;
+
+            if (typeof value === "string") {
+                if (/^data:image\//i.test(value)) return value;
+                if (/^https?:\/\//i.test(value)) return value;
+                if (/^[A-Za-z0-9+/=\r\n]+$/.test(value) && value.length > 128) {
+                    return "data:image/png;base64," + value.replace(/\s+/g, "");
+                }
+                return null;
+            }
+
+            if (Array.isArray(value)) {
+                for (var i = 0; i < value.length; i++) {
+                    var nested = fromValue(value[i]);
+                    if (nested) return nested;
+                }
+                return null;
+            }
+
+            if (typeof value === "object") {
+                if (value.inline_data) return fromValue(value.inline_data);
+                if (value.inlineData) return fromValue(value.inlineData);
+                if (value.url) return fromValue(value.url);
+                if (value.image_url && value.image_url.url) return fromValue(value.image_url.url);
+                if (value.b64_json) return fromValue(value.b64_json);
+                if (value.base64) return fromValue(value.base64);
+                if (value.image_base64) return fromValue(value.image_base64);
+                if (value.image) return fromValue(value.image);
+                if (value.output) return fromValue(value.output);
+                if (value.images) return fromValue(value.images);
+                if (value.data) return fromValue(value.data);
+                if (value.content) return fromValue(value.content);
+                if (value.message) return fromValue(value.message);
+                if (value.choices) return fromValue(value.choices);
+                if (value.candidates) return fromValue(value.candidates);
+                if (value.parts) return fromValue(value.parts);
+            }
+
+            return null;
+        }
+
+        return fromValue(responseJson);
+    }
+
+    function importAiResultToPhotoshop(imageUrlOrData) {
+        function getExtensionFromMimeType(mimeType) {
+            var mime = String(mimeType || "").toLowerCase();
+            if (mime.indexOf("png") !== -1) return "png";
+            if (mime.indexOf("jpeg") !== -1 || mime.indexOf("jpg") !== -1) return "jpg";
+            if (mime.indexOf("webp") !== -1) return "webp";
+            return "png";
+        }
+
+        function getMimeTypeFromDataUrl(dataUrl) {
+            var match = String(dataUrl || "").match(/^data:(image\/[a-z0-9.+-]+);base64,/i);
+            return match ? match[1] : "image/png";
+        }
+
+        function getExtensionFromBytes(bytes) {
+            if (!bytes || bytes.length < 12) return "png";
+            if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return "png";
+            if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return "jpg";
+            if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+                bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return "webp";
+            return "png";
+        }
+
+        function saveBase64AndImport(dataUrl, forcedExtension) {
+            var base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, "");
+            var ext = forcedExtension || getExtensionFromMimeType(getMimeTypeFromDataUrl(dataUrl));
+            var outPath = csInterface.getSystemPath(SystemPath.USER_DATA) + "\\uilink_ai_result_" + Date.now() + "." + ext;
+            var writeRes = window.cep.fs.writeFile(outPath, base64Data, window.cep.encoding.Base64);
+            if (writeRes.err !== window.cep.fs.NO_ERROR) {
+                setStatus("Saving AI result failed.", "error");
+                logMsg("[AI Clear] failed to write result PNG: " + writeRes.err);
+                if (btnMakeClear) btnMakeClear.disabled = false;
+                return;
+            }
+
+            var safePath = outPath.replace(/\\/g, "/").replace(/'/g, "\\'");
+            csInterface.evalScript("replaceCurrentLayerWithFile('" + safePath + "')", function(res) {
+                if (btnMakeClear) btnMakeClear.disabled = false;
+                res = String(res || "").replace(/\r|\n/g, "").trim();
+                if (res.indexOf("ERROR") === 0) {
+                    setStatus(res, "error");
+                    logMsg("[AI Clear] Photoshop import failed: " + res);
+                    return;
+                }
+
+                setStatus("AI clear finished successfully.", "");
+                logMsg("[AI Clear] done");
+            });
+        }
+
+        if (/^data:image\//i.test(imageUrlOrData)) {
+            saveBase64AndImport(imageUrlOrData);
+            return;
+        }
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", imageUrlOrData, true);
+        xhr.responseType = "arraybuffer";
+        xhr.onload = function() {
+            if (xhr.status !== 200) {
+                setStatus("Downloading AI result failed.", "error");
+                logMsg("[AI Clear] result download failed: HTTP " + xhr.status);
+                if (btnMakeClear) btnMakeClear.disabled = false;
+                return;
+            }
+
+            var bytes = new Uint8Array(xhr.response);
+            var binary = "";
+            var chunk = 0x8000;
+            for (var i = 0; i < bytes.length; i += chunk) {
+                binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + chunk, bytes.length)));
+            }
+            var contentType = xhr.getResponseHeader("Content-Type") || "";
+            var inferredExt = getExtensionFromMimeType(contentType);
+            if (!contentType) {
+                inferredExt = getExtensionFromBytes(bytes);
+            }
+            saveBase64AndImport("data:image/" + inferredExt + ";base64," + btoa(binary), inferredExt);
+        };
+        xhr.onerror = function() {
+            setStatus("Downloading AI result failed.", "error");
+            logMsg("[AI Clear] result download network error");
+            if (btnMakeClear) btnMakeClear.disabled = false;
+        };
+        xhr.send();
+    }
+
+    loadAiSettings();
+    bindAiSettingPersistence(aiApiUrlInput, "UILink_AI_ApiUrl");
+    bindAiSettingPersistence(aiApiKeyInput, "UILink_AI_ApiKey");
+    bindAiSettingPersistence(aiModelInput, "UILink_AI_Model");
+    bindAiSettingPersistence(aiPromptInput, "UILink_AI_Prompt");
+
+    var aiModelSelect = document.getElementById("aiModelSelect");
+    if (aiModelSelect && aiModelInput) {
+        aiModelSelect.addEventListener("change", function() {
+            aiModelInput.value = aiModelSelect.value || "";
+            localStorage.setItem("UILink_AI_Model", aiModelInput.value || "");
+        });
+    }
+
+    if (btnFetchModels) {
+        btnFetchModels.addEventListener("click", function() {
+            var apiUrl = normalizeAiApiUrl(aiApiUrlInput ? aiApiUrlInput.value : "");
+            var apiKey = aiApiKeyInput ? aiApiKeyInput.value : "";
+
+            if (!apiUrl || !apiKey) {
+                setStatus("Please fill API URL and API Key first.", "error");
+                logMsg("[AI Clear] model fetch missing API URL or API Key");
+                return;
+            }
+
+            var requestInfo = buildModelListRequest(apiUrl, apiKey);
+            if (!requestInfo) {
+                setStatus("Building model list request failed.", "error");
+                logMsg("[AI Clear] failed to build model list request");
+                return;
+            }
+
+            var listUrl = requestInfo.url;
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", listUrl, true);
+            Object.keys(requestInfo.headers).forEach(function(headerName) {
+                xhr.setRequestHeader(headerName, requestInfo.headers[headerName]);
+            });
+            xhr.timeout = 30000;
+
+            btnFetchModels.disabled = true;
+            setStatus("Fetching model list...", "warning");
+            logMsg("[AI Clear] fetching models from " + listUrl + " (" + requestInfo.mode + ")");
+
+            xhr.onload = function() {
+                btnFetchModels.disabled = false;
+
+                if (xhr.status < 200 || xhr.status >= 300) {
+                    setStatus("Model fetch failed: HTTP " + xhr.status, "error");
+                    logMsg("[AI Clear] model fetch failed: HTTP " + xhr.status + " | " + xhr.responseText);
+                    return;
+                }
+
+                var responseJson;
+                try {
+                    responseJson = JSON.parse(xhr.responseText);
+                } catch (e) {
+                    setStatus("Parsing model list failed.", "error");
+                    logMsg("[AI Clear] model list JSON parse failed: " + e.message);
+                    return;
+                }
+
+                var filtered = parseModelListResponse(responseJson, requestInfo.mode);
+
+                setAiModelOptions(filtered);
+
+                if (!filtered.length) {
+                    setStatus("No usable models returned.", "warning");
+                    logMsg("[AI Clear] model list returned 0 usable models");
+                    return;
+                }
+
+                setStatus("Models fetched: " + filtered.length, "");
+                logMsg("[AI Clear] model list fetched: " + filtered.slice(0, 10).join(", "));
+            };
+
+            xhr.onerror = function() {
+                btnFetchModels.disabled = false;
+                setStatus("Model fetch network error.", "error");
+                logMsg("[AI Clear] model fetch network error");
+            };
+
+            xhr.ontimeout = function() {
+                btnFetchModels.disabled = false;
+                setStatus("Model fetch timed out.", "error");
+                logMsg("[AI Clear] model fetch timeout");
+            };
+
+            xhr.send();
+        });
+    }
+
+    if (btnMakeClear) {
+        btnMakeClear.addEventListener("click", function() {
+            if (btnMakeClear.disabled) return;
+
+            var apiUrl = normalizeAiApiUrl(aiApiUrlInput ? aiApiUrlInput.value : "");
+            var apiKey = aiApiKeyInput ? aiApiKeyInput.value : "";
+            var model = aiModelInput ? aiModelInput.value.trim() : "";
+            var promptText = aiPromptInput ? aiPromptInput.value.trim() : defaultAiPrompt;
+            var isGeminiNative = isGeminiNativeApiUrl(apiUrl);
+
+            if (!apiUrl || !apiKey || !model) {
+                setStatus("Please fill API URL, API Key, and Model first.", "error");
+                logMsg("[AI Clear] missing API configuration");
+                return;
+            }
+
+            if (isGeminiNative && !/(image|imagen|nano)/i.test(model)) {
+                setStatus("Selected Gemini model may not support image output. Use an image-capable Gemini model.", "warning");
+                logMsg("[AI Clear] warning: model may not be image-capable: " + model);
+            }
+
+            btnMakeClear.disabled = true;
+            setStatus("Step 1: exporting active layer for AI...", "warning");
+            logMsg("[AI Clear] button clicked");
+
+            csInterface.evalScript("getActiveLayerExportForAI()", function(result) {
+                result = String(result || "").trim();
+                if (!result || result.indexOf("ERROR") === 0) {
+                    btnMakeClear.disabled = false;
+                    setStatus("Export active layer failed.", "error");
+                    logMsg("[AI Clear] export failed: " + result);
+                    return;
+                }
+
+                var exportInfo;
+                try {
+                    exportInfo = JSON.parse(result);
+                } catch (e) {
+                    btnMakeClear.disabled = false;
+                    setStatus("Parsing export info failed.", "error");
+                    logMsg("[AI Clear] export JSON parse failed: " + e.message);
+                    return;
+                }
+
+                var readRes = window.cep.fs.readFile(exportInfo.path, window.cep.encoding.Base64);
+                if (readRes.err !== window.cep.fs.NO_ERROR || !readRes.data) {
+                    btnMakeClear.disabled = false;
+                    setStatus("Reading exported PNG failed.", "error");
+                    logMsg("[AI Clear] read exported PNG failed: " + readRes.err);
+                    return;
+                }
+
+                var normalizedImageBase64 = normalizeBase64Payload(readRes.data);
+                if (!normalizedImageBase64) {
+                    btnMakeClear.disabled = false;
+                    setStatus("Normalizing exported PNG failed.", "error");
+                    logMsg("[AI Clear] normalized base64 is empty");
+                    return;
+                }
+
+                var xhr = new XMLHttpRequest();
+                var requestUrl = apiUrl;
+                var payload;
+
+                if (isGeminiNative) {
+                    requestUrl = buildGeminiNativeUrl(apiUrl, model);
+                    payload = {
+                        contents: [{
+                            parts: [
+                                { text: promptText || defaultAiPrompt },
+                                {
+                                    inline_data: {
+                                        mime_type: "image/png",
+                                        data: normalizedImageBase64
+                                    }
+                                }
+                            ]
+                        }],
+                        generationConfig: {
+                            responseModalities: ["TEXT", "IMAGE"]
+                        }
+                    };
+                } else {
+                    payload = {
+                        model: model,
+                        messages: [{
+                            role: "user",
+                            content: [
+                                { type: "text", text: promptText || defaultAiPrompt },
+                                { type: "image_url", image_url: { url: "data:image/png;base64," + normalizedImageBase64 } }
+                            ]
+                        }],
+                        temperature: 0.2
+                    };
+                }
+
+                xhr.open("POST", requestUrl, true);
+                xhr.setRequestHeader("Content-Type", "application/json");
+                if (isGeminiNative) {
+                    xhr.setRequestHeader("x-goog-api-key", buildGeminiApiKey(apiKey));
+                } else {
+                    xhr.setRequestHeader("Authorization", buildAuthHeader(apiKey));
+                }
+                xhr.timeout = 120000;
+
+                setStatus("Step 2: requesting AI upscale...", "warning");
+                logMsg("[AI Clear] requesting " + requestUrl);
+                logMsg("[AI Clear] mode: " + (isGeminiNative ? "Gemini native generateContent" : "OpenAI-compatible chat/completions"));
+
+                xhr.onload = function() {
+                    if (xhr.status < 200 || xhr.status >= 300) {
+                        btnMakeClear.disabled = false;
+                        setStatus("AI request failed: HTTP " + xhr.status, "error");
+                        logMsg("[AI Clear] request failed: HTTP " + xhr.status + " | " + xhr.responseText);
+                        return;
+                    }
+
+                    var responseJson;
+                    try {
+                        responseJson = JSON.parse(xhr.responseText);
+                    } catch (e) {
+                        btnMakeClear.disabled = false;
+                        setStatus("Parsing AI response failed.", "error");
+                        logMsg("[AI Clear] response JSON parse failed: " + e.message);
+                        return;
+                    }
+
+                    var imageResult = extractImageResult(responseJson);
+                    if (!imageResult) {
+                        btnMakeClear.disabled = false;
+                        setStatus("No image found in AI response.", "error");
+                        logMsg("[AI Clear] no image payload found in response");
+                        return;
+                    }
+
+                    setStatus("Step 3: importing AI result back to Photoshop...", "warning");
+                    logMsg("[AI Clear] image payload received");
+                    importAiResultToPhotoshop(imageResult);
+                };
+
+                xhr.onerror = function() {
+                    btnMakeClear.disabled = false;
+                    setStatus("AI request network error.", "error");
+                    logMsg("[AI Clear] network error");
+                };
+
+                xhr.ontimeout = function() {
+                    btnMakeClear.disabled = false;
+                    setStatus("AI request timed out.", "error");
+                    logMsg("[AI Clear] request timeout");
+                };
+
+                try {
+                    xhr.send(JSON.stringify(payload));
+                } catch (e) {
+                    btnMakeClear.disabled = false;
+                    setStatus("Sending AI request failed.", "error");
+                    logMsg("[AI Clear] send failed: " + e.message);
+                }
+            });
+        });
+    }
+
     var btnForceCheckUpdate = document.getElementById("btnForceCheckUpdate");
     if (btnForceCheckUpdate) {
         btnForceCheckUpdate.addEventListener("click", function() {

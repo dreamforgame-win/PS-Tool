@@ -60,7 +60,7 @@ var UILINK_META_KEY = "UILinkLayerMeta"; // Custom Options 命名空间
 
 /**
  * 获取当前文档的所有图层元数据映射表
- * 返回格式: { "layerId": { outputType, compType, width, height, sliceSuffix, isExport, moduleName, baseName }, ... }
+ * 返回格式: { "layerId": { outputType, compType, width, height, sliceSuffix, isExport, moduleName, baseName, posX, posY }, ... }
  */
 function _getDocMetaMap() {
     try {
@@ -95,7 +95,7 @@ function getLayerMeta(layerId) {
 /**
  * 写入指定图层的元数据
  * @param {number} layerId - 图层唯一 ID
- * @param {object} meta - 元数据对象 { outputType, compType, width, height, sliceSuffix, isExport, moduleName, baseName }
+ * @param {object} meta - 元数据对象 { outputType, compType, width, height, sliceSuffix, isExport, moduleName, baseName, posX, posY }
  */
 function setLayerMeta(layerId, meta) {
     var map = _getDocMetaMap();
@@ -144,7 +144,9 @@ function getLayerMetaWithFallback(layer) {
             width: width,
             height: height,
             sliceSuffix: sliceSuffix,
-            isExport: isExport
+            isExport: isExport,
+            posX: 0,
+            posY: 0
         };
         return meta;
     }
@@ -215,6 +217,9 @@ function getActiveLayerInfo() {
             outputType: "atlas",
             compType: "image",
             isExport: false,
+            posX: 0,
+            posY: 0,
+            hasCustomPosition: false,
             hasMeta: false // 标记是否已有元数据（用于前端判断是否为已配置图层）
         };
 
@@ -227,6 +232,9 @@ function getActiveLayerInfo() {
             info.height = meta.height || 0;
             info.sliceSuffix = meta.sliceSuffix || "0,0,0,0";
             info.isExport = !!meta.isExport;
+            info.posX = parseInt(meta.posX, 10) || 0;
+            info.posY = parseInt(meta.posY, 10) || 0;
+            info.hasCustomPosition = meta.hasOwnProperty("posX") || meta.hasOwnProperty("posY");
             info.hasMeta = true;
         } else {
             // [智能读取规则] 针对无元数据图层的命名推测
@@ -254,6 +262,9 @@ function getActiveLayerInfo() {
             "\"height\":" + info.height + "," +
             "\"realWidth\":" + info.realWidth + "," +
             "\"realHeight\":" + info.realHeight + "," +
+            "\"posX\":" + info.posX + "," +
+            "\"posY\":" + info.posY + "," +
+            "\"hasCustomPosition\":" + info.hasCustomPosition + "," +
             "\"sliceSuffix\":\"" + info.sliceSuffix + "\"," +
             "\"outputType\":\"" + info.outputType + "\"," +
             "\"compType\":\"" + info.compType + "\"," +
@@ -279,7 +290,9 @@ function applyLayerRename(infoStr) {
             width: info.width || 0,
             height: info.height || 0,
             sliceSuffix: info.sliceSuffix || "0,0,0,0",
-            isExport: !!info.isExport
+            isExport: !!info.isExport,
+            posX: parseInt(info.posX, 10) || 0,
+            posY: parseInt(info.posY, 10) || 0
         };
 
         // 生成导出文件名（同时作为图层显示名）
@@ -299,6 +312,43 @@ function applyLayerRename(infoStr) {
         layer.name = exportName;
 
         return exportName;
+    } catch(e) { return "ERROR: " + e.toString(); }
+}
+
+function setActiveLayerExportFlag(infoStr) {
+    try {
+        if (app.documents.length === 0) return "ERROR: 没有打开的文档";
+        var info = JSON.parse(infoStr || "{}");
+        var doc = app.activeDocument;
+        var layer = doc.activeLayer;
+        if (!layer) return "ERROR: 未选中图层";
+
+        var existingMeta = getLayerMetaWithFallback(layer) || {};
+        var resolvedPosX = info.hasOwnProperty("posX") ? (parseInt(info.posX, 10) || 0) : (parseInt(existingMeta.posX, 10) || 0);
+        var resolvedPosY = info.hasOwnProperty("posY") ? (parseInt(info.posY, 10) || 0) : (parseInt(existingMeta.posY, 10) || 0);
+        var meta = {
+            moduleName: info.moduleName || existingMeta.moduleName || doc.name.split(".")[0],
+            baseName: info.baseName || existingMeta.baseName || layer.name,
+            outputType: info.outputType || existingMeta.outputType || "atlas",
+            compType: info.compType || existingMeta.compType || "image",
+            width: info.width || existingMeta.width || 0,
+            height: info.height || existingMeta.height || 0,
+            sliceSuffix: info.sliceSuffix || existingMeta.sliceSuffix || "0,0,0,0",
+            isExport: !!info.isExport,
+            posX: resolvedPosX,
+            posY: resolvedPosY
+        };
+
+        var exportName = buildExportName(meta);
+        if (!exportName) return "ERROR: 无法生成导出文件名";
+
+        var checkResult = checkDuplicateExportNamesNew(layer.id, exportName, meta.isExport);
+        if (checkResult !== "OK") {
+            return "ERROR: " + checkResult;
+        }
+
+        setLayerMeta(layer.id, meta);
+        return meta.isExport ? "EXPORT_ON" : "EXPORT_OFF";
     } catch(e) { return "ERROR: " + e.toString(); }
 }
 
@@ -326,6 +376,22 @@ function getExportFileName(layerName) {
         }
         return prefix + "@" + baseName + ".png";
     }
+}
+
+function buildLayerMetaSignature(meta) {
+    if (!meta) return "";
+    return [
+        meta.outputType || "",
+        meta.compType || "",
+        parseInt(meta.width, 10) || 0,
+        parseInt(meta.height, 10) || 0,
+        meta.sliceSuffix || "0,0,0,0",
+        meta.isExport ? 1 : 0,
+        meta.moduleName || "",
+        meta.baseName || "",
+        parseInt(meta.posX, 10) || 0,
+        parseInt(meta.posY, 10) || 0
+    ].join("|");
 }
 
 /**
@@ -424,6 +490,7 @@ function exportLayerImage(layer, fileName) {
         // 1. 从隐藏属性读取元数据（兼容旧格式）
         var meta = getLayerMetaWithFallback(layer);
         var forceW = 0, forceH = 0;
+        var posX = 0, posY = 0;
         var outputType = "atlas";
         var baseName = layer.name;
 
@@ -431,6 +498,8 @@ function exportLayerImage(layer, fileName) {
             outputType = meta.outputType || "atlas";
             forceW = meta.width || 0;
             forceH = meta.height || 0;
+            posX = parseInt(meta.posX, 10) || 0;
+            posY = parseInt(meta.posY, 10) || 0;
             baseName = meta.baseName || layer.name;
         } else {
             // 最终兜底：从图层名推测
@@ -474,9 +543,37 @@ function exportLayerImage(layer, fileName) {
         // 【核心修复】1. 先修剪掉透明区域，使得图片紧贴并在这个临时画布中绝对居中
         tempDoc.trim(TrimType.TRANSPARENT, true, true, true, true);
         
-        // 【核心修复】2. 如果指定了强制尺寸，基于中心调整画布，保证四周增加等量的透明占位
+        // 如果指定了强制尺寸，则按照保存的位置参数导出
         if (forceW > 0 && forceH > 0) {
-            tempDoc.resizeCanvas(UnitValue(forceW, "px"), UnitValue(forceH, "px"), AnchorPosition.MIDDLECENTER);
+            var contentW = tempDoc.width.as("px");
+            var contentH = tempDoc.height.as("px");
+            var minPosX = Math.min(0, forceW - contentW);
+            var maxPosX = Math.max(0, forceW - contentW);
+            var minPosY = Math.min(0, forceH - contentH);
+            var maxPosY = Math.max(0, forceH - contentH);
+            var defaultPosX = Math.round((forceW - contentW) / 2);
+            var defaultPosY = Math.round((forceH - contentH) / 2);
+            var targetPosX = (meta && meta.hasOwnProperty("posX")) ? posX : defaultPosX;
+            var targetPosY = (meta && meta.hasOwnProperty("posY")) ? posY : defaultPosY;
+
+            targetPosX = Math.max(minPosX, Math.min(maxPosX, targetPosX));
+            targetPosY = Math.max(minPosY, Math.min(maxPosY, targetPosY));
+
+            var workW = Math.max(forceW, contentW);
+            var workH = Math.max(forceH, contentH);
+            tempDoc.resizeCanvas(UnitValue(workW, "px"), UnitValue(workH, "px"), AnchorPosition.TOPLEFT);
+
+            var positionedLayer = tempDoc.activeLayer;
+            if (positionedLayer) {
+                var curBounds = positionedLayer.bounds;
+                var curLeft = curBounds[0].as("px");
+                var curTop = curBounds[1].as("px");
+                positionedLayer.translate(UnitValue(targetPosX - curLeft, "px"), UnitValue(targetPosY - curTop, "px"));
+            }
+
+            if (workW !== forceW || workH !== forceH) {
+                tempDoc.resizeCanvas(UnitValue(forceW, "px"), UnitValue(forceH, "px"), AnchorPosition.TOPLEFT);
+            }
         }
 
         var isNineSliceExport = false;
@@ -697,8 +794,9 @@ function scanChanges(payloadStr) {
                                   Math.abs(ol.bounds.height - nl.bounds.height) < 1 &&
                                   Math.abs(ol.bounds.left - nl.bounds.left) < 1 &&
                                   Math.abs(ol.bounds.top - nl.bounds.top) < 1);
-                
-                if (nameMatch && boundsMatch) {
+                var metaMatch = ((ol.metaSignature || "") === (nl.metaSignature || ""));
+
+                if (nameMatch && boundsMatch && metaMatch) {
                     status = "same";
                 } else {
                     status = "mod";
@@ -1147,7 +1245,9 @@ function applyNineSliceCrop(top, bottom, left, right) {
                 width: w,
                 height: h,
                 sliceSuffix: sliceStr,
-                isExport: true
+                isExport: true,
+                posX: 0,
+                posY: 0
             };
             setLayerMeta(layer.id, newMeta);
 
@@ -1168,6 +1268,7 @@ function parseLayerRecursive(layer, parentBounds, doc) {
     var type = detectLayerType(layer);
     var bounds = getBounds(layer);
     var unityPosition = computeUnityPosition(bounds, parentBounds, doc);
+    var layerMeta = getLayerMetaWithFallback(layer);
 
     var parsed = {
         id: layer.id,
@@ -1177,6 +1278,7 @@ function parseLayerRecursive(layer, parentBounds, doc) {
         visible: layer.visible,
         opacity: layer.opacity,
         bounds: bounds,
+        metaSignature: buildLayerMetaSignature(layerMeta),
         unityPosition: unityPosition,
         children: [],
         imageData: null
@@ -1389,7 +1491,7 @@ function getFilePreview(pathStr) {
     try {
         var f = new File(pathStr);
         if (!f.exists) return "";
-        
+
         // 如果文件太大（超过5MB）且不是图片，直接跳过全量读取
         if (f.length > 5 * 1024 * 1024) {
             // 这里可以尝试使用 XMP 读取，如果不支持则返回空
@@ -1400,11 +1502,11 @@ function getFilePreview(pathStr) {
             var xmpFile = new XMPFile(f.fsName, XMPConst.FILE_UNKNOWN, XMPConst.OPEN_FOR_READ);
             var xmp = xmpFile.getXMP();
             xmpFile.closeFile(XMPConst.CLOSE_UPDATE_SAFELY);
-            
+
             // 尝试获取缩略图
             var thumb = xmp.getProperty(XMPConst.NS_XMP_G_IMG, "thumbnail");
-            if (thumb) return thumb.value; 
-            
+            if (thumb) return thumb.value;
+
             return "LARGE_FILE"; // 标识文件太大且无缩略图
         }
 
@@ -1414,11 +1516,274 @@ function getFilePreview(pathStr) {
         var data = f.read();
         f.close();
         return encodeBase64(data);
-    } catch (e) { 
-        return ""; 
+    } catch (e) {
+        return "";
     }
 }
 
+// ==========================================================
+// 6. AI 变清晰辅助逻辑
+// ==========================================================
+function getActiveLayerExportForAI() {
+    try {
+        if (app.documents.length === 0) return "ERROR: 没有打开的文档";
+        var doc = app.activeDocument;
+        var layer = doc.activeLayer;
 
+        var oldUnit = app.preferences.rulerUnits;
+        app.preferences.rulerUnits = Units.PIXELS;
 
+        var w, h, res;
+        try {
+            w = layer.bounds[2].value - layer.bounds[0].value;
+            h = layer.bounds[3].value - layer.bounds[1].value;
+            res = doc.resolution;
+        } catch (e) {
+            app.preferences.rulerUnits = oldUnit;
+            return "ERROR: 无法获取图层尺寸";
+        }
 
+        var tempDoc = app.documents.add(new UnitValue(w, "px"), new UnitValue(h, "px"), res, "temp_preview", NewDocumentMode.RGB, DocumentFill.TRANSPARENT);
+
+        app.activeDocument = doc;
+        layer.duplicate(tempDoc, ElementPlacement.PLACEATBEGINNING);
+
+        app.activeDocument = tempDoc;
+
+        var tmpFile = new File(Folder.temp.fsName + "/uilink_ai_source.png");
+        var opts = new PNGSaveOptions();
+        opts.compression = 0;
+        tempDoc.saveAs(tmpFile, opts, true, Extension.LOWERCASE);
+        tempDoc.close(SaveOptions.DONOTSAVECHANGES);
+
+        app.preferences.rulerUnits = oldUnit;
+        return JSON.stringify({
+            path: tmpFile.fsName,
+            width: w,
+            height: h
+        });
+    } catch(e) {
+        return "ERROR: " + e.toString();
+    }
+}
+
+// 供本地 Pipeline 使用的图层导出，带预处理锐化
+function exportLayerForPipeline() {
+    try {
+        if (app.documents.length === 0) return "ERROR: 没有打开的文档";
+        var doc = app.activeDocument;
+        var layer = doc.activeLayer;
+
+        var w = layer.bounds[2].value - layer.bounds[0].value;
+        var h = layer.bounds[3].value - layer.bounds[1].value;
+        var res = doc.resolution;
+
+        var tempDoc = app.documents.add(new UnitValue(w, "px"), new UnitValue(h, "px"), res, "temp_pipeline_source", NewDocumentMode.RGB, DocumentFill.TRANSPARENT);
+
+        app.activeDocument = doc;
+        layer.duplicate(tempDoc, ElementPlacement.PLACEATBEGINNING);
+        app.activeDocument = tempDoc;
+
+        var processLayer = tempDoc.activeLayer;
+
+        // Pipeline 第 2 步：预处理轻微锐化 (USM)
+        // 目标：帮助超分模型识别边缘，Amount: 20%, Radius: 0.4
+        try {
+            processLayer.applyUnSharpMask(20, 0.4, 0);
+        } catch(e) {}
+
+        var tmpFile = new File(Folder.temp.fsName + "/uilink_pipeline_source.png");
+        var opts = new PNGSaveOptions();
+        opts.compression = 0; // 最快速度导出
+        tempDoc.saveAs(tmpFile, opts, true, Extension.LOWERCASE);
+        tempDoc.close(SaveOptions.DONOTSAVECHANGES);
+
+        return tmpFile.fsName;
+    } catch (e) {
+        return "ERROR: 导出源文件失败 - " + e.toString();
+    }
+}
+
+// 接收 Pipeline 最终合并好的高清图，导入并进行后处理锐化
+function importFromPipeline(filePath) {
+    try {
+        if (app.documents.length === 0) return "ERROR: 没有打开的文档";
+        var doc = app.activeDocument;
+        var oldLayer = doc.activeLayer;
+
+        var oldUnit = app.preferences.rulerUnits;
+        app.preferences.rulerUnits = Units.PIXELS;
+
+        var file = new File(filePath);
+        if (!file.exists) return "ERROR: 高清化成品文件不存在: " + filePath;
+
+        // 打开合成好的高清图片
+        var tempImgDoc = app.open(file);
+        var imgLayer = tempImgDoc.activeLayer;
+
+        // Pipeline 第 6 步：后处理 (轻量级锐化)
+        // 目标：消除 ESRGAN 产生的轻微油画感，Amount: 10%, Radius: 0.2
+        try {
+            imgLayer.applyUnSharpMask(10, 0.2, 0);
+        } catch(e) {}
+
+        // 复制回原文档
+        imgLayer.duplicate(doc, ElementPlacement.PLACEATBEGINNING);
+        tempImgDoc.close(SaveOptions.DONOTSAVECHANGES);
+
+        app.activeDocument = doc;
+        var newLayer = doc.activeLayer;
+
+        // 获取中心进行对齐（大图和原图中心点对齐）
+        var oldBounds = oldLayer.bounds;
+        var oldCenterX = oldBounds[0].value + (oldBounds[2].value - oldBounds[0].value) / 2;
+        var oldCenterY = oldBounds[1].value + (oldBounds[3].value - oldBounds[1].value) / 2;
+
+        var newBounds = newLayer.bounds;
+        var newCenterX = newBounds[0].value + (newBounds[2].value - newBounds[0].value) / 2;
+        var newCenterY = newBounds[1].value + (newBounds[3].value - newBounds[1].value) / 2;
+
+        var dx = oldCenterX - newCenterX;
+        var dy = oldCenterY - newCenterY;
+
+        if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
+            newLayer.translate(new UnitValue(dx, "px"), new UnitValue(dy, "px"));
+        }
+
+        // 命名: 原名称 [HD]
+        newLayer.name = oldLayer.name + " [HD]";
+
+        // 移动到原图层之上
+        try {
+            newLayer.move(oldLayer, ElementPlacement.PLACEBEFORE);
+        } catch(e) {}
+
+        // 隐藏原图层，保留作备份
+        oldLayer.visible = false;
+
+        app.preferences.rulerUnits = oldUnit;
+        return "SUCCESS";
+
+    } catch(e) {
+        return "ERROR: " + e.toString() + " (Line: " + e.line + ")";
+    }
+}
+
+function replaceCurrentLayerWithFile(filePath) {
+    try {
+        if (app.documents.length === 0) return "ERROR: 没有打开的文档";
+        var doc = app.activeDocument;
+        var oldLayer = doc.activeLayer;
+
+        var oldName = oldLayer.name;
+        var meta = getLayerMetaWithFallback(oldLayer);
+
+        var oldUnit = app.preferences.rulerUnits;
+        app.preferences.rulerUnits = Units.PIXELS;
+
+        // 获取旧图层的中心坐标和绝对尺寸
+        var oldBounds = oldLayer.bounds;
+        var oldW = oldBounds[2].value - oldBounds[0].value;
+        var oldH = oldBounds[3].value - oldBounds[1].value;
+        var oldCenterX = oldBounds[0].value + oldW / 2;
+        var oldCenterY = oldBounds[1].value + oldH / 2;
+
+        // 尝试用系统原生打开方式将图片作为一个新文档打开
+        var file = new File(filePath);
+        if (!file.exists) return "ERROR: AI 生成的图片文件不存在于路径: " + filePath;
+
+        // 1. 打开图片文件
+        var tempImgDoc = app.open(file);
+
+        // 2. 解锁背景图层，允许透明度
+        if (tempImgDoc.activeLayer.isBackgroundLayer) {
+            tempImgDoc.activeLayer.isBackgroundLayer = false;
+        }
+
+        // 3. 将 AI 生成的图片直接缩放回原图层的精确尺寸
+        if (oldW > 0 && oldH > 0) {
+            tempImgDoc.resizeImage(UnitValue(oldW, "px"), UnitValue(oldH, "px"), null, ResampleMethod.BICUBIC);
+        }
+
+        // 4. 全自动抠图：去除纯黑背景
+        var w = tempImgDoc.width.as("px");
+        var h = tempImgDoc.height.as("px");
+
+        function clickAndClear(x, y) {
+            try {
+                // 使用魔棒工具点击
+                var desc = new ActionDescriptor();
+                var ref = new ActionReference();
+                ref.putProperty(charIDToTypeID("Chnl"), charIDToTypeID("fsel"));
+                desc.putReference(charIDToTypeID("null"), ref);
+                var posDesc = new ActionDescriptor();
+                posDesc.putUnitDouble(charIDToTypeID("Hrzn"), charIDToTypeID("#Pxl"), x);
+                posDesc.putUnitDouble(charIDToTypeID("Vrtc"), charIDToTypeID("#Pxl"), y);
+                desc.putObject(charIDToTypeID("T   "), charIDToTypeID("Pnt "), posDesc);
+                desc.putInteger(charIDToTypeID("Tlrn"), 10); // 容差设为10，扩大消除边缘残留黑色像素的能力
+                desc.putBoolean(charIDToTypeID("Cntg"), true); // 连续的颜色（非常重要，防止内部黑色被删）
+                executeAction(charIDToTypeID("setd"), desc, DialogModes.NO);
+
+                // 删除选区
+                tempImgDoc.selection.clear();
+                tempImgDoc.selection.deselect();
+            } catch(e) {}
+        }
+
+        // 点四个角删除背景
+        clickAndClear(1, 1);
+        clickAndClear(w - 2, 1);
+        clickAndClear(1, h - 2);
+        clickAndClear(w - 2, h - 2);
+
+        // 5. 消除黑边 (Layer -> Matting -> Remove Black Matte)
+        // 这一步能完美去除边缘反锯齿残留的黑色光晕
+        try {
+            executeAction(charIDToTypeID("RmvB"), undefined, DialogModes.NO);
+        } catch(e) {}
+
+        // 6. 复制到目标文档
+        var imgLayer = tempImgDoc.activeLayer;
+        imgLayer.duplicate(doc, ElementPlacement.PLACEATBEGINNING);
+
+        // 关闭临时图片文档
+        tempImgDoc.close(SaveOptions.DONOTSAVECHANGES);
+
+        // 切换回主文档
+        app.activeDocument = doc;
+        var newLayer = doc.activeLayer; // 刚刚复制过来的图层会自动成为激活图层
+
+        // 修改新图层的名称，增加 _AI_Enhanced 后缀
+        newLayer.name = oldName + "_AI_Enhanced";
+        if (meta) {
+            setLayerMeta(newLayer.id, meta);
+        }
+
+        // 如果旧图层有父组（例如在某个文件夹里），需要把新图层移进去
+        try {
+            newLayer.move(oldLayer, ElementPlacement.PLACEBEFORE);
+        } catch (moveErr) {
+            // 移动失败不中断，继续后续对齐逻辑
+        }
+
+        // 对齐新图层到旧图层的位置
+        var newBounds = newLayer.bounds;
+        var newCenterX = newBounds[0].value + (newBounds[2].value - newBounds[0].value) / 2;
+        var newCenterY = newBounds[1].value + (newBounds[3].value - newBounds[1].value) / 2;
+
+        var dx = oldCenterX - newCenterX;
+        var dy = oldCenterY - newCenterY;
+
+        if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
+            newLayer.translate(new UnitValue(dx, "px"), new UnitValue(dy, "px"));
+        }
+
+        // 隐藏原来的图层，不删除
+        oldLayer.visible = false;
+
+        app.preferences.rulerUnits = oldUnit;
+        return "SUCCESS";
+    } catch(e) {
+        return "ERROR: PS 原生错误 - " + e.toString() + " (Line: " + e.line + ")";
+    }
+}
