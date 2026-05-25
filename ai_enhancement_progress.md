@@ -1,28 +1,11 @@
-# UI-Link AI / ESRGAN Progress Notes
+# UI-Link AI Progress Notes
 
 Updated: 2026-05-25
 Status: Core logic is working, but the HTML shell was rolled back to a safe baseline and some UI is now re-injected dynamically from `js/main.js`.
 
 ## What is working
 
-### 1. Local ESRGAN test pipeline
-
-- Button: `btnMakeClearTest`
-- Flow now works end to end:
-  1. Export active layer from Photoshop with `exportLayerForPipeline()`
-  2. Split source PNG into RGB and Alpha in CEP canvas
-  3. Run local `realesrgan-ncnn-vulkan.exe`
-  4. Rebuild alpha after upscale
-  5. Import final image back to Photoshop with `importFromPipeline()`
-
-- Important fixes already made:
-  - Switched image loading from fragile `file:///...png` loading to `window.cep.fs.readFile(..., Base64)` + `data:image/...`
-  - Added output-file polling/retry so the panel no longer hangs at "restore alpha"
-  - Prefer direct exe launch for Real-ESRGAN instead of always wrapping with `cmd /c`
-  - Added fallback to `cmd.exe` only if direct process launch fails
-  - Increased output wait time
-
-### 2. Cloud AI clear flow
+### 1. Cloud AI clear flow
 
 - Button: `btnMakeClear`
 - Photoshop export helper used: `getActiveLayerExportForAI()`
@@ -44,7 +27,7 @@ Status: Core logic is working, but the HTML shell was rolled back to a safe base
   - Save AI result using the correct extension instead of always forcing `.png`
     - This fixed the Photoshop error where a JPEG payload was saved with a `.png` suffix
 
-### 3. Dynamic UI injection strategy
+### 2. Dynamic UI injection strategy
 
 - `index.html` was temporarily broken multiple times during manual HTML edits because of encoding-corrupted content and malformed tags.
 - To reduce white-screen risk, `index.html` was restored to the safe baseline from git.
@@ -93,15 +76,9 @@ That means:
 - API mode still tends to "re-generate" rather than "faithfully upscale"
 - Prompt tuning helps, but product-side enhancement behavior from consumer apps is not fully reproducible via simple API prompting
 
-### 2. ESRGAN output quality
-
-- Local ESRGAN is conservative
-- It preserves structure better than generative redraw, but may look only mildly sharper if original details are already lost
-
 ## Files touched in this round
 
 - `js/main.js`
-  - Local ESRGAN pipeline fixes
   - Cloud AI request / import fixes
   - Model list fetching
   - Dynamic UI injection
@@ -109,8 +86,6 @@ That means:
 - `jsx/hostscript.jsx`
   - Uses:
     - `getActiveLayerExportForAI()`
-    - `exportLayerForPipeline()`
-    - `importFromPipeline()`
     - `replaceCurrentLayerWithFile()`
 
 - `index.html`
@@ -143,8 +118,6 @@ That means:
 
 5. Clean temp files
 - AI result temp files
-- local ESRGAN temp split files
-- final pipeline temp outputs
 
 ## Safe restart point for next conversation
 
