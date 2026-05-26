@@ -1,77 +1,125 @@
-# 🎨 UI-Link 工具箱 (Photoshop CEP 插件)
+# UI-Link Photoshop CEP Plugin
 
-![Version](https://img.shields.io/badge/version-v1.0.8-blue.svg)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey.svg)
-![Photoshop](https://img.shields.io/badge/Photoshop-CC%202015+-31a8ff.svg)
+UI-Link 是一个面向 UI 美术与客户端协作流程的 Photoshop CEP 插件，主要用于图层参数管理、九宫格切图、增量导出，以及面板内的辅助预览与效率操作。
 
-UI-Link 是一个专为游戏开发和软件研发团队打造的 **Photoshop 自动化 UI 切图与协作插件**。它致力于抹平 UI 美术与客户端程序之间的沟通鸿沟，提供极速增量切图、可视化九宫格编辑、以及无痕图层元数据管理。
+## 功能概览
 
----
+### 1. 图层参数管理
+- 为图层保存名称、导出类型、前缀、组件类型、尺寸、导出开关等参数
+- 参数写入图层元数据，不依赖把长配置串拼进图层名
+- 提供名称预览、最近名称下拉、尺寸预设、位置预览与拖拽调整
 
-## ✨ 核心特性 (Features)
+### 2. 九宫格编辑
+- 读取当前选中图层并显示九宫格参考线
+- 支持拖拽或输入数值调整上下左右切线
+- 支持九宫格参数保存、预览和后续导出联动
 
-### 1. 纯净图层命名 & 无痕数据存储 (v1.0.8+ 全新架构)
-告别为了传参而把图层名写得像乱码一样的时代（如 `btn_close|atlas|button|120x120...`）。
-UI-Link 使用 Photoshop 底层的 `Action Descriptor` 将组件类型、输出类别（大图/图集）、尺寸和九宫格信息**隐式存储**在图层内部。
-- 🎨 **美术视角**：图层名极度纯净，只显示最终导出名（如 `common@btnClose`）。
-- 💻 **程序视角**：完整的配置参数随 PSD 跨设备无损传递，不产生任何额外配置文件。
+### 3. 增量扫描导出
+- 扫描当前 PSD 与历史导出数据差异
+- 区分新增、修改、不变、关闭导出的图层
+- 只导出需要更新的资源，提高切图效率
 
-### 2. 🚀 极速增量导出 (Incremental Export)
-还在每次修改一个小图标就苦等几分钟全量切图吗？
-- UI-Link 拥有智能 Diff 算法，一键扫描当前文档与历史导出的 JSON 数据差异。
-- 自动标记出 **[新增]**、**[修改]**、**[不变]** 的图层，仅对变动项进行极速切图导出。
+### 4. AI 辅助能力
+- 支持云端 AI 清晰化流程
+- 可配置 API URL、API Key、模型与提示词
+- 将结果重新导入 Photoshop 图层
 
-### 3. 🔲 可视化九宫格编辑器 (9-Slice Editor)
-在 Photoshop 内部直接提供九宫格切线调整 UI：
-- **拖拽参考线**或精准输入数值。
-- **无损拉伸扩图**：一键将带九宫格参数的图层转化为“智能对象”，在 PS 中随意 `Ctrl+T` 缩放，边缘永不模糊。
-- **完美还原**：即使拉伸变形，一键即可根据九宫格规则重绘还原完美的边角。
+### 5. 自动更新
+- 面板内检查版本
+- 发现新版本后可直接拉取更新包并覆盖本地插件
 
-### 4. 🔄 团队级无感热更新 (Auto Update)
-插件内置 CDN 轮询检测，发现新版本时在面板顶部展示提示，一键静默拉取并覆盖更新，确保全团队工具链永远保持一致。
+## 安装方式
 
----
+### 1. 开启 CEP 调试模式
 
-## 📦 安装指南 (Installation)
+Photoshop 需要允许加载未签名扩展。
 
-### 1. 允许加载未签名的扩展 (开发者模式)
-为了让 Photoshop 加载本地插件，你需要开启 `PlayerDebugMode`：
-- **Windows**: 
-  打开注册表 (`regedit`)，进入 `HKEY_CURRENT_USER\Software\Adobe\CSXS.9` (数字对应你的 PS 版本)，新建字符串值 `PlayerDebugMode`，设为 `1`。
-- **macOS**:
-  打开终端执行：`defaults write com.adobe.CSXS.9 PlayerDebugMode 1`
+- Windows:
+  在注册表 `HKEY_CURRENT_USER\Software\Adobe\CSXS.9`（版本号按实际 Photoshop 调整）下创建字符串值 `PlayerDebugMode=1`
+- macOS:
+  在终端执行 `defaults write com.adobe.CSXS.9 PlayerDebugMode 1`
 
 ### 2. 放入扩展目录
-将本项目的文件夹完整复制到以下对应系统的 CEP 扩展目录中：
-- **Windows**: `C:\Users\<你的用户名>\AppData\Roaming\Adobe\CEP\extensions\cep-plugin`
-- **macOS**: `~/Library/Application Support/Adobe/CEP/extensions/cep-plugin`
+
+将整个插件目录复制到 CEP 扩展目录中。
+
+- Windows:
+  `C:\Users\<用户名>\AppData\Roaming\Adobe\CEP\extensions\cep-plugin`
+- macOS:
+  `~/Library/Application Support/Adobe/CEP/extensions/cep-plugin`
 
 ### 3. 重启 Photoshop
-在 Photoshop 的顶部菜单栏中，点击 **窗口 (Window) -> 扩展功能 (Extensions) -> UI-Link 工具箱** 即可打开面板。
 
----
+打开 Photoshop 后，在：
 
-## 🛠 使用流转 (Workflow)
+`窗口 -> 扩展功能 -> UI-Link`
 
-1. **配置图层**：选中需要导出的图层/组，在【属性命名】Tab 中选择它是图集还是独立大图，设置组件类型（按钮、滑条等）。
-2. **设置九宫格 (可选)**：如果需要拉伸，进入【九宫格】Tab 拖拽绿色的参考线。
-3. **确认应用**：点击底部应用，图层名称瞬间变为干净的导出名。
-4. **一键切图**：进入【扫描导出】Tab，设置输出路径，点击扫描，一键导出修改过的切图和结构 JSON。
+即可看到插件面板。
 
----
+## 基本使用流程
 
-## 👨‍💻 技术栈说明 (Tech Stack)
+### 1. 配置图层参数
+- 选中需要处理的图层
+- 在“图层属性”页签中设置名称、类型、前缀、组件类型、尺寸等参数
+- 如需调整资源在导出画布中的位置，可直接在位置预览中拖拽
+- 点击“保存参数”
 
-- **前端层 (Frontend)**：Vanilla HTML / CSS / JS，无复杂框架，极致轻量响应快。
-- **宿主环境层 (Host)**：Photoshop ExtendScript (JSX)，深入调用底层 ActionManager API。
-- **桥接层 (Bridge)**：Adobe CEP `CSInterface.js` 实现面板与宿主引擎的数据透传。
+### 2. 设置九宫格
+- 切到“九宫格”页签
+- 点击“读取当前选中图层”
+- 拖动参考线或输入切线数值
+- 点击应用保存九宫格参数
 
-## 📝 更新日志 (Changelog)
+### 3. 扫描并导出
+- 切到“扫描导出”页签
+- 设置 JSON 输出目录和图片输出目录
+- 点击扫描，查看变更列表
+- 勾选需要导出的资源
+- 点击导出
 
-**v1.0.8**
-- [架构] 重构元数据存储方案，全面启用图层自定义隐藏属性 (`app.putCustomOptions`)。
-- [优化] 图层名称回归纯净导出名，彻底解决与其他工具（如图层重命名脚本）的冲突问题。
-- [兼容] 内置旧版 `|` 分隔符图层名平滑读取兼容机制，操作旧图层自动向新架构洗白。
+### 4. 使用 AI 清晰化
+- 在 Setting / AI 实验室中配置接口信息
+- 在 AI 清晰化页签中设置提示词
+- 执行云端 AI 清晰化
 
----
-*Designed for better Game UI Workflows.*
+## 面板说明
+
+### 图层属性
+- 配置名称、类型、尺寸、导出状态
+- 预览导出命名与位置
+
+### 九宫格
+- 编辑九宫格切线
+- 查看切图预览
+
+### 扫描导出
+- 扫描差异
+- 批量导出资源与结构数据
+
+### Setting
+- 查看版本
+- 检查更新
+- 配置 AI 实验室参数
+
+## 项目结构
+
+- `index.html`
+  面板静态结构与样式
+- `js/main.js`
+  面板交互逻辑、状态管理、更新检测、前后端通信
+- `jsx/hostscript.jsx`
+  Photoshop ExtendScript 主逻辑，负责图层元数据、导出、九宫格与图像处理
+- `CSXS/manifest.xml`
+  CEP 插件清单
+- `version.json`
+  当前插件版本信息
+- `instructions.md`
+  项目结构与维护说明
+
+## 适用场景
+
+- 游戏 UI 切图
+- 客户端资源命名规范管理
+- 图层参数持久化
+- 九宫格资源生产
+- UI 美术与程序协同导出
