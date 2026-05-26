@@ -45,13 +45,20 @@
         .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 
         /* 命名工具 */
-        .name-group { display: flex; gap: 4px; margin-bottom: 10px; align-items: center; }
+        .name-group { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; padding-left: 4px; padding-right: 2px; }
         .name-row { display: flex; gap: 8px; margin-bottom: 10px; }
         .name-row .name-group { flex: 1; min-width: 0; margin-bottom: 0; }
-        .name-label { color: #aaa; width: 44px; flex-shrink: 0; text-align: right; }
+        .name-label { color: #aaa; width: 30px; flex-shrink: 0; text-align: left; padding-left: 0; padding-right: 0; }
         .name-stack { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
-        .name-inline { display: flex; gap: 6px; align-items: center; min-width: 0; }
+        .name-inline { display: flex; gap: 6px; align-items: center; min-width: 0; width: 100%; }
         .name-select { width: 118px; flex: none; background: #222; border: 1px solid #555; color: #bbb; padding: 6px; border-radius: 3px; }
+        .name-combo { position: relative; flex: 1 1 auto; min-width: 0; width: 100%; margin-right: -2px; }
+        .name-combo .name-input { display: block; width: 100%; box-sizing: border-box; padding-right: 26px; }
+        .combo-toggle { position: absolute; top: 50%; right: 7px; transform: translateY(-50%); color: #9a9a9a; font-size: 11px; cursor: pointer; user-select: none; }
+        .combo-menu { display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #252525; border: 1px solid #444; border-radius: 4px; z-index: 120; box-shadow: 0 4px 12px rgba(0,0,0,0.45); max-height: 180px; overflow-y: auto; }
+        .combo-item { padding: 7px 10px; color: #ddd; cursor: pointer; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .combo-item:hover { background: #333; color: #fff; }
+        .combo-empty { padding: 7px 10px; color: #777; font-size: 11px; }
         .name-input { flex: 1; background: #222; border: 1px solid #555; color: #fff; padding: 6px; border-radius: 3px; }
         .size-input { width: 45px; background: #222; border: 1px solid #555; color: #fff; padding: 6px; border-radius: 3px; text-align: center; }
         .slice-display { flex:1; background:#222; color:#00e676; font-size:11px; padding:6px; border:1px solid #333; border-radius:3px; min-height:14px; min-width:0; }
@@ -289,12 +296,12 @@
             <span class="name-label">名称:</span>
             <div class="name-stack">
                 <div class="name-inline">
-                    <input type="text" id="moduleBaseName" class="name-input" placeholder="请输入图层核心名">
-                    <select id="moduleBaseHistory" class="name-select">
-                        <option value="">最近名称</option>
-                    </select>
+                    <div class="name-combo">
+                        <input type="text" id="moduleBaseName" class="name-input" placeholder="&#35831;&#36755;&#20837;&#21517;&#31216;">
+                        <span id="btnToggleBaseHistory" class="combo-toggle">&#9662;</span>
+                        <div id="moduleBaseHistoryMenu" class="combo-menu"></div>
+                    </div>
                 </div>
-                <span style="font-size:10px; color:#777;">自动记录最近 10 条已保存名称，可直接回填</span>
             </div>
         </div>
 
@@ -388,14 +395,13 @@
             </div>
         </div>
 
-        <div class="row" style="margin-top:10px; align-items:flex-start;">
-            <span style="color:#aaa;">是否导出:</span>
-            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+        <div class="row" style="margin-top:10px; align-items:center;">
+            <span style="color:#aaa;">&#26159;&#21542;&#23548;&#20986;: <span style="font-size:10px; color:#777;">&#20999;&#25442;&#21518;&#31435;&#21363;&#29983;&#25928;&#65292;&#26080;&#38656;&#20445;&#23384;</span></span>
+            <div style="display:flex; align-items:center;">
                 <label class="switch">
                     <input type="checkbox" id="chkExportEnable">
                     <span class="slider-round"></span>
                 </label>
-                <span style="font-size:10px; color:#777;">切换后立即生效，无需保存</span>
             </div>
         </div>
 

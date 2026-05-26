@@ -213,169 +213,6 @@ function checkAutoUpdate(isManual) {
     }
 }
 
-function showUpdateBanner_DEPRECATED(newVersion, zipUrl, repoName, branch) {
-    var banner = document.getElementById("updateBanner");
-    if (!banner) return;
-
-    banner.style.display = "block";
-    document.getElementById("newVersionText").innerText = newVersion;
-
-    banner.onclick = function() {
-        banner.innerText = "⏳ 初始化更新引擎中...";
-        banner.style.pointerEvents = "none";
-        banner.style.background = "#FFC107";
-
-        var localExtPath = csInterface.getSystemPath(SystemPath.EXTENSION);
-        var userDataPath = csInterface.getSystemPath(SystemPath.USER_DATA);
-
-        // 状态文件存放在用户目录，以解决 Program Files 无写入权限的问题
-        var statusFile = userDataPath + "/uilink_update_status.txt";
-        var tmpZip = "$env:TEMP\\uilink_update.zip";
-        var tmpDir = "$env:TEMP\\uilink_update_dir";
-
-        // 构建带有详细进度输出的 PowerShell 脚本
-        // 注意：将多行合并，并处理好双引号和单引号的转义，确保 PowerShell 引擎能够顺畅执行
-        var psScript =
-            "$statusFile = '" + statusFile + "'; " +
-            "Set-Content -Path $statusFile -Value '【1/3】正在飞速下载更新包...'; " +
-            "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; " +
-            "$ProgressPreference = 'SilentlyContinue'; " +
-            "Invoke-WebRequest -Uri '" + zipUrl + "' -OutFile '" + tmpZip + "'; " +
-            "Set-Content -Path $statusFile -Value '【2/3】正在解压文件...'; " +
-            "if(Test-Path '" + tmpDir + "') { Remove-Item -Recurse -Force '" + tmpDir + "' }; " +
-            "Expand-Archive -Path '" + tmpZip + "' -DestinationPath '" + tmpDir + "' -Force; " +
-            "Set-Content -Path $statusFile -Value '【3/3】准备覆盖文件(如弹出权限框请点“是”)...'; " +
-            "$src = Join-Path '" + tmpDir + "' '" + repoName + "-" + branch + "\\*'; " +
-            "$dest = '" + localExtPath + "\\'; " +
-            // 因为 Start-Process 带有 -Verb RunAs 是以独立窗口拉起的管理员进程，
-            // 加上 -Wait 会导致主 PowerShell 脚本一直挂起死锁，所以要去掉 -Wait
-            "$argList = '/c \"xcopy \"\"' + $src + '\"\" \"\"' + $dest + '\"\" /s /e /y /c /h & echo SUCCESS > \"\"' + $statusFile + '\"\"\"'; " +
-            "Start-Process cmd.exe -ArgumentList $argList -Verb RunAs -WindowStyle Hidden;";
-
-        if (window.cep && window.cep.process && typeof window.cep.process.createProcess === 'function') {
-            logMsg("启动 PowerShell 并开启进度监听...");
-            // 修改这里：增加 -NoProfile 参数，加快启动速度，并且只执行一次
-            window.cep.process.createProcess("powershell.exe", "-NoProfile", "-Command", psScript);
-
-            var checkCount = 0;
-            var lastProgressTxt = "";
-            // 每 1000ms 读取一次 statusFile 来刷新界面进度
-            var checkInterval = setInterval(function() {
-                checkCount++;
-                var result = window.cep.fs.readFile(statusFile);
-                if (result.err === window.cep.fs.NO_ERROR) {
-                    var txt = result.data.trim();
-                    if (txt.indexOf("SUCCESS") !== -1) {
-                        clearInterval(checkInterval);
-                        banner.innerText = "✅ 更新完成！正在重载面板...";
-                        banner.style.background = "#4CAF50";
-
-                        // 清理状态文件 (防止卡死)
-                        window.cep.fs.deleteFile(statusFile);
-
-                        setTimeout(function() { window.location.reload(true); }, 1500);
-                    } else if (txt && txt !== lastProgressTxt) {
-                        banner.innerText = "⏳ " + txt;
-                        logMsg("进度: " + txt);
-                        lastProgressTxt = txt;
-                    }
-                } else {
-                    if (checkCount % 2 === 0) { // 每2秒打一次日志防刷屏
-                        logMsg("等待状态文件生成中...");
-                    }
-                }
-            }, 1000);
-
-            // 超时保底机制 (45秒)
-            setTimeout(function() {
-                clearInterval(checkInterval);
-                if (banner.innerText.indexOf("✅") === -1) {
-                    banner.innerText = "⚠️ 更新可能还在后台进行或被 UAC 拦截，请稍后手动重启 PS";
-                    banner.style.background = "#FF9800";
-                    banner.style.pointerEvents = "auto";
-                }
-            }, 45000);
-
-        } else {
-            // 兜底方案：使用 XMLHttpRequest 下载 zip
-            logMsg("尝试使用 XMLHttpRequest 下载...");
-            var xhr = new XMLHttpRequest();
-            xhr.open("GET", zipUrl, true);
-            xhr.responseType = "arraybuffer"; // 使用 arraybuffer 处理二进制文件
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    banner.innerText = "⏳ 正在解压并覆盖文件...";
-                    logMsg("下载完成，写入文件...");
-
-                    var result = window.cep.fs.writeFile(tmpZip, xhr.response);
-                    if (result === window.cep.fs.NO_ERROR) {
-                        // 依然需要 PowerShell 来解压，但只需简单的解压命令
-                        var psExtract = "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; " +
-                                        "Expand-Archive -Path '" + tmpZip + "' -DestinationPath '" + tmpDir + "' -Force; " +
-                                        "$src = Join-Path '" + tmpDir + "' '" + repoName + "-" + branch + "\\*'; " +
-                                        "$dest = '" + localExtPath + "\\'; " +
-                                        "$argList = '/c \"xcopy \"\"' + $src + '\"\" \"\"' + $dest + '\"\" /s /e /y /c /h & echo SUCCESS > \"\"' + statusFile + '\"\"\"'; " +
-                                        "Start-Process cmd.exe -ArgumentList $argList -WindowStyle Hidden;";
-                        window.cep.process.createProcess("powershell.exe", "-NoProfile", "-Command", psExtract);
-
-                        // 开始同样的轮询
-                        startStatusPolling(banner, statusFile, checkInterval, checkCount, lastProgressTxt);
-                    } else {
-                        logMsg("写入临时压缩包失败：" + result);
-                        showManualDownload(banner);
-                    }
-                } else {
-                     logMsg("XHR 下载失败：" + xhr.status);
-                     showManualDownload(banner);
-                }
-            };
-            xhr.onerror = function() {
-                logMsg("XHR 下载发生网络错误。");
-                showManualDownload(banner);
-            }
-            xhr.send();
-        }
-    };
-}
-
-function startStatusPolling_DEPRECATED(banner, statusFile, checkInterval, checkCount, lastProgressTxt) {
-    checkInterval = setInterval(function() {
-        checkCount++;
-        var result = window.cep.fs.readFile(statusFile);
-        if (result.err === window.cep.fs.NO_ERROR) {
-            var txt = result.data.trim();
-            if (txt.indexOf("SUCCESS") !== -1) {
-                clearInterval(checkInterval);
-                banner.innerText = "✅ 更新完成！正在重载面板...";
-                banner.style.background = "#4CAF50";
-
-                // 清理状态文件 (防止卡死)
-                window.cep.fs.deleteFile(statusFile);
-
-                setTimeout(function() { window.location.reload(true); }, 1500);
-            } else if (txt && txt !== lastProgressTxt) {
-                banner.innerText = "⏳ " + txt;
-                logMsg("进度: " + txt);
-                lastProgressTxt = txt;
-            }
-        } else {
-            if (checkCount % 2 === 0) { // 每2秒打一次日志防刷屏
-                logMsg("等待状态文件生成中...");
-            }
-        }
-    }, 1000);
-
-    // 超时保底机制 (45秒)
-    setTimeout(function() {
-        clearInterval(checkInterval);
-        if (banner.innerText.indexOf("✅") === -1) {
-            banner.innerText = "⚠️ 更新可能还在后台进行或被 UAC 拦截，请稍后手动重启 PS";
-            banner.style.background = "#FF9800";
-            banner.style.pointerEvents = "auto";
-        }
-    }, 45000);
-}
-
 function showManualDownload(banner) {
      banner.innerText = "❌ 你的 PS 环境不支持静默更新，请手动下载！";
      banner.style.background = "#F44336";
@@ -810,7 +647,8 @@ document.addEventListener("DOMContentLoaded", function() {
     var uiNaming = {
         root: document.getElementById("moduleRootName"),
         base: document.getElementById("moduleBaseName"),
-        baseHistory: document.getElementById("moduleBaseHistory"),
+        baseHistoryMenu: document.getElementById("moduleBaseHistoryMenu"),
+        btnToggleBaseHistory: document.getElementById("btnToggleBaseHistory"),
         output: document.getElementById("moduleOutputType"),
         comp: document.getElementById("moduleCompType"),
         w: document.getElementById("moduleSizeW"),
@@ -1103,13 +941,25 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     function renderRecentBaseNames() {
-        if (!uiNaming.baseHistory) return;
-        uiNaming.baseHistory.innerHTML = '<option value="">最近名称</option>';
+        if (!uiNaming.baseHistoryMenu) return;
+        uiNaming.baseHistoryMenu.innerHTML = "";
+        if (!recentBaseNames.length) {
+            var empty = document.createElement("div");
+            empty.className = "combo-empty";
+            empty.textContent = "No recent names";
+            uiNaming.baseHistoryMenu.appendChild(empty);
+            return;
+        }
         recentBaseNames.forEach(function(name) {
-            var option = document.createElement("option");
-            option.value = name;
-            option.textContent = name;
-            uiNaming.baseHistory.appendChild(option);
+            var item = document.createElement("div");
+            item.className = "combo-item";
+            item.textContent = name;
+            item.addEventListener("click", function() {
+                uiNaming.base.value = name;
+                uiNaming.baseHistoryMenu.style.display = "none";
+                updatePreview();
+            });
+            uiNaming.baseHistoryMenu.appendChild(item);
         });
     }
 
@@ -1304,13 +1154,40 @@ document.addEventListener("DOMContentLoaded", function() {
     // 监听输入变化
     renderRecentBaseNames();
 
-    if (uiNaming.baseHistory) {
-        uiNaming.baseHistory.addEventListener("change", function() {
-            if (!this.value) return;
-            uiNaming.base.value = this.value;
-            updatePreview();
+    if (uiNaming.btnToggleBaseHistory) {
+        uiNaming.btnToggleBaseHistory.addEventListener("click", function(e) {
+            e.stopPropagation();
+            if (!uiNaming.baseHistoryMenu) return;
+            renderRecentBaseNames();
+            uiNaming.baseHistoryMenu.style.display = uiNaming.baseHistoryMenu.style.display === "block" ? "none" : "block";
         });
     }
+
+    if (uiNaming.base) {
+        uiNaming.base.addEventListener("focus", function() {
+            renderRecentBaseNames();
+        });
+        uiNaming.base.addEventListener("click", function(e) {
+            e.stopPropagation();
+            if (!uiNaming.baseHistoryMenu) return;
+            renderRecentBaseNames();
+            uiNaming.baseHistoryMenu.style.display = "block";
+        });
+        uiNaming.base.addEventListener("input", function() {
+            if (!uiNaming.baseHistoryMenu) return;
+            var keyword = String(uiNaming.base.value || "").trim().toLowerCase();
+            Array.prototype.forEach.call(uiNaming.baseHistoryMenu.children, function(child) {
+                if (!child.classList || !child.classList.contains("combo-item")) return;
+                child.style.display = !keyword || child.textContent.toLowerCase().indexOf(keyword) !== -1 ? "block" : "none";
+            });
+        });
+    }
+
+    document.addEventListener("click", function(e) {
+        if (!uiNaming.baseHistoryMenu) return;
+        if (e.target === uiNaming.base || e.target === uiNaming.btnToggleBaseHistory || uiNaming.baseHistoryMenu.contains(e.target)) return;
+        uiNaming.baseHistoryMenu.style.display = "none";
+    });
 
     [uiNaming.root, uiNaming.base, uiNaming.output, uiNaming.comp, uiNaming.exportChk, uiNaming.w, uiNaming.h, uiNaming.atlasPrefix].forEach(function(el) {
         if (!el) return;
@@ -1565,8 +1442,8 @@ document.addEventListener("DOMContentLoaded", function() {
                         }
                         
                         // 自动整体居中
-                        panX = (wrapperW - boxW) / 2;
-                        panY = (wrapperH - boxH) / 2;
+                        currentZoom = 1;
+                        recenterSliceCanvas();
                         if (typeof updateTransform === "function") updateTransform();
                         
                         if (typeof updateGuidesFromInputs === "function") updateGuidesFromInputs();
@@ -1574,8 +1451,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     };
 
                     window.refreshCanvasDimensions();
-                    document.getElementById("zoomSlider").value = 1;
-                    document.getElementById("zoomLabel").innerText = "100%";
+                    setZoom(1);
                     initGuides();
                     updateCropPreview(); // 初始化显示裁剪预览
                     setStatus("请拖动参考线设置切图区域", "");
@@ -1592,6 +1468,11 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     });
 
+    function recenterSliceCanvas() {
+        panX = 0;
+        panY = 0;
+    }
+
     function updateTransform() {
         canvasBox.style.transform = "translate(" + panX + "px, " + panY + "px) scale(" + currentZoom + ")";
         var invScale = 1 / currentZoom;
@@ -1605,6 +1486,7 @@ document.addEventListener("DOMContentLoaded", function() {
         currentZoom = Math.max(0.2, Math.min(5, z));
         document.getElementById("zoomSlider").value = currentZoom;
         document.getElementById("zoomLabel").innerText = Math.round(currentZoom * 100) + "%";
+        if (currentSliceData) recenterSliceCanvas();
         updateTransform();
     }
 
@@ -1614,7 +1496,6 @@ document.addEventListener("DOMContentLoaded", function() {
 
     document.getElementById("btnRecenter").addEventListener("click", function() {
         if (!currentSliceData) return;
-        panX = 0; panY = 0;
         var fitZoomW = canvasWrapper.clientWidth / currentSliceData.boxW;
         var fitZoomH = canvasWrapper.clientHeight / currentSliceData.boxH;
         var bestZoom = Math.min(fitZoomW, fitZoomH) * 0.9;
@@ -2145,7 +2026,6 @@ document.addEventListener("DOMContentLoaded", function() {
                 currentLayerInfo.isExport = nextState;
                 currentLayerInfo.hasMeta = true;
             }
-            lastLayerNameForSync = "";
             setStatus(nextState ? "已开启导出，立即生效，无需保存。" : "已关闭导出，立即生效，无需保存。", "");
             logMsg(nextState ? "导出已开启（即时生效）" : "导出已关闭（即时生效）");
         });
