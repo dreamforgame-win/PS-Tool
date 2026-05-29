@@ -19,6 +19,65 @@ function logMsg(msg) {
     logArea.scrollTop = logArea.scrollHeight;
 }
 
+function cleanCepSystemPath(rawPath) {
+    var normalized = String(rawPath || "");
+    normalized = decodeURIComponent(normalized);
+    normalized = normalized.replace(/^file:\/*/i, "");
+    if (/^[A-Za-z]:/.test(normalized)) return normalized.replace(/\//g, "\\");
+    return normalized.replace(/^\/+/, "").replace(/\//g, "\\");
+}
+
+function getCepSystemPathSafe(name, fallbackConst) {
+    try {
+        if (csInterface && typeof csInterface.getSystemPath === "function" && typeof fallbackConst !== "undefined") {
+            return cleanCepSystemPath(csInterface.getSystemPath(fallbackConst));
+        }
+    } catch (e) {}
+    try {
+        if (window.__adobe_cep__ && typeof window.__adobe_cep__.getSystemPath === "function") {
+            return cleanCepSystemPath(window.__adobe_cep__.getSystemPath(name));
+        }
+    } catch (e2) {}
+    return "";
+}
+
+function updateExtensionPathDisplay() {
+    var pathEl = document.getElementById("settingExtensionPath");
+    var warningEl = document.getElementById("settingPathWarning");
+    if (!pathEl || !warningEl) return;
+
+    var extPath = getCepSystemPathSafe("extension", (typeof SystemPath !== "undefined" ? SystemPath.EXTENSION : undefined));
+    pathEl.innerText = extPath || "无法读取当前插件路径";
+
+    if (!extPath) {
+        warningEl.style.display = "block";
+        warningEl.innerText = "无法读取插件路径，请检查 CEP 环境。";
+        return;
+    }
+
+    var userDataPath = getCepSystemPathSafe("userData", (typeof SystemPath !== "undefined" ? SystemPath.USER_DATA : undefined));
+    var userRoot = "";
+    if (userDataPath) {
+        var lowerUserDataPath = userDataPath.toLowerCase();
+        var adobeMarker = "\\adobe";
+        var adobeIndex = lowerUserDataPath.indexOf(adobeMarker);
+        var adobeRoot = adobeIndex !== -1 ? userDataPath.substring(0, adobeIndex + adobeMarker.length) : (userDataPath.replace(/\\+$/, "") + "\\Adobe");
+        userRoot = adobeRoot + "\\CEP\\extensions";
+    }
+    var folderName = extPath.split("\\").pop() || "cep-plugin";
+    var recommendedPath = userRoot ? (userRoot + "\\" + folderName) : "";
+    var isProgramFiles = /\\Program Files(?: \(x86\))?\\Common Files\\Adobe\\CEP\\extensions\\/i.test(extPath + "\\");
+    var isRecommended = recommendedPath && extPath.toLowerCase() === recommendedPath.toLowerCase();
+
+    if (isProgramFiles || (recommendedPath && !isRecommended)) {
+        warningEl.style.display = "block";
+        warningEl.innerText = "建议迁移到用户级路径，热更新更稳定：\n" + recommendedPath + "\n当前路径如果在 Program Files 下，可能因权限导致提示更新成功但版本未变化。";
+    } else {
+        warningEl.style.display = "none";
+        warningEl.innerText = "";
+    }
+}
+
 // ==========================================
 // 加载本地版本号展示 (通过 XHR 稳定读取)
 // ==========================================
@@ -85,7 +144,7 @@ function checkAutoUpdate(isManual) {
     ];
 
     var currentCdnIndex = 0;
-    var zipDownloadUrl = "https://github.com/" + githubOwner + "/" + repoName + "/archive/refs/heads/" + branch + ".zip";
+    var zipDownloadUrl = "https://github.com/" + githubOwner + "/" + repoName + "/archive/refs/heads/" + branch + ".zip?t=" + new Date().getTime();
 
     if (isManual) logMsg("开始请求远端版本号...");
 
@@ -617,6 +676,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // 立即执行本地版本显示
     try { loadLocalVersionDisplay(); } catch(e) { logMsg("调用版本显示失败：" + e); }
+    try { updateExtensionPathDisplay(); } catch(e) { logMsg("调用路径显示失败：" + e); }
 
     // 初始化时检测热更
     try { setTimeout(checkAutoUpdate, 1500); } catch(e) { logMsg("调用热更检测失败：" + e); }
