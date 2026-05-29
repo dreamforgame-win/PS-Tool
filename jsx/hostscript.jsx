@@ -163,6 +163,9 @@ function buildExportName(meta) {
     if (!meta) return null;
     var baseName = meta.baseName || "unnamed";
 
+    if (meta.outputType.indexOf("split") === 0) {
+        return baseName;
+    }
     if (meta.outputType.indexOf("texture") === 0) {
         return "tex_" + baseName;
     } else {
@@ -339,7 +342,7 @@ function splitActiveLayerIntoComponents(infoStr) {
         var docH = Math.round(doc.height.as("px"));
 
         var moduleName = info.moduleName || doc.name.replace(/\.[^\.]+$/, "");
-        var outputType = info.outputType || "atlas:common";
+        var outputType = info.outputType || "split";
         var compType = info.compType || "image";
         var sliceSuffix = info.sliceSuffix || "0,0,0,0";
         var plannedNames = {};
@@ -371,6 +374,8 @@ function splitActiveLayerIntoComponents(infoStr) {
         var outputPrefix = "split";
         if (outputType.indexOf("atlas:") === 0) {
             outputPrefix = outputType.split(":")[1] || outputPrefix;
+        } else if (outputType.indexOf("split") === 0) {
+            outputPrefix = (info.groupPrefix || info.basePrefix || "split");
         } else if (outputType.indexOf("texture") === 0) {
             outputPrefix = "texture";
         }
@@ -658,7 +663,9 @@ function exportLayerImage(layer, fileName) {
 
         // 2. 确定最终文件名
         var finalFileName = "";
-        if (outputType.indexOf("texture") === 0) {
+        if (outputType.indexOf("split") === 0) {
+            finalFileName = baseName + ".png";
+        } else if (outputType.indexOf("texture") === 0) {
             finalFileName = "tex_" + baseName + ".png";
         } else {
             var prefix = "common";

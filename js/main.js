@@ -2089,12 +2089,14 @@ document.addEventListener("DOMContentLoaded", function() {
     function buildSplitApplyInfo(options) {
         options = options || {};
         var splitPrefix = (uiSplit.basePrefix && uiSplit.basePrefix.value.trim()) || "component";
-        var finalOutputType = "atlas:" + splitPrefix;
+        var finalOutputType = "split";
         var scaleX = splitState.sourceWidth / Math.max(1, splitState.previewWidth);
         var scaleY = splitState.sourceHeight / Math.max(1, splitState.previewHeight);
         return {
             moduleName: (uiNaming.root && uiNaming.root.value.trim()) || (currentLayerInfo && currentLayerInfo.docName) || "",
             outputType: finalOutputType,
+            basePrefix: splitPrefix,
+            groupPrefix: splitPrefix,
             compType: (uiNaming.comp && uiNaming.comp.value) || "image",
             isExport: true,
             sliceSuffix: "0,0,0,0",
