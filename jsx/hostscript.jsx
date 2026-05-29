@@ -315,6 +315,150 @@ function applyLayerRename(infoStr) {
     } catch(e) { return "ERROR: " + e.toString(); }
 }
 
+function splitActiveLayerIntoComponents(infoStr) {
+    var oldUnit = app.preferences.rulerUnits;
+    try {
+        if (app.documents.length === 0) return "ERROR: 没有打开的文档";
+        var info = JSON.parse(infoStr || "{}");
+        if (!info.components || !info.components.length) return "ERROR: 没有可拆分的组件";
+
+        var doc = app.activeDocument;
+        var sourceLayer = doc.activeLayer;
+        if (!sourceLayer) return "ERROR: 未选中图层";
+        if (sourceLayer.typename === "LayerSet") return "ERROR: 当前选中的是图层组，请选择单个图片图层";
+        if (info.sourceLayerId && sourceLayer.id !== parseInt(info.sourceLayerId, 10)) {
+            return "ERROR: 当前选中图层已变化，请重新分析后再执行拆图";
+        }
+
+        app.preferences.rulerUnits = Units.PIXELS;
+
+        var sourceBounds = sourceLayer.bounds;
+        var sourceLeft = Math.round(sourceBounds[0].as("px"));
+        var sourceTop = Math.round(sourceBounds[1].as("px"));
+        var docW = Math.round(doc.width.as("px"));
+        var docH = Math.round(doc.height.as("px"));
+
+        var moduleName = info.moduleName || doc.name.replace(/\.[^\.]+$/, "");
+        var outputType = info.outputType || "atlas:common";
+        var compType = info.compType || "image";
+        var sliceSuffix = info.sliceSuffix || "0,0,0,0";
+        var plannedNames = {};
+
+        for (var p = 0; p < info.components.length; p++) {
+            var plannedMeta = {
+                moduleName: moduleName,
+                baseName: info.components[p].baseName || ("component_" + (p + 1)),
+                outputType: outputType,
+                compType: compType,
+                width: parseInt(info.components[p].width, 10) || 1,
+                height: parseInt(info.components[p].height, 10) || 1,
+                sliceSuffix: sliceSuffix,
+                isExport: true,
+                posX: 0,
+                posY: 0
+            };
+            var plannedExportName = buildExportName(plannedMeta);
+            if (!plannedExportName) return "ERROR: 无法生成导出名";
+            if (plannedNames[plannedExportName]) return "ERROR: 拆图命名重复: " + plannedExportName;
+            plannedNames[plannedExportName] = true;
+
+            var checkResult = checkDuplicateExportNamesNew(sourceLayer.id, plannedExportName, true);
+            if (checkResult !== "OK") return "ERROR: " + checkResult;
+        }
+
+        var createdCount = 0;
+        var createdIds = [];
+        var outputPrefix = "split";
+        if (outputType.indexOf("atlas:") === 0) {
+            outputPrefix = outputType.split(":")[1] || outputPrefix;
+        } else if (outputType.indexOf("texture") === 0) {
+            outputPrefix = "texture";
+        }
+        var splitGroup = doc.layerSets.add();
+        splitGroup.name = outputPrefix + "_split";
+        try {
+            splitGroup.move(sourceLayer, ElementPlacement.PLACEBEFORE);
+        } catch (groupMoveErr) {}
+
+        for (var i = 0; i < info.components.length; i++) {
+            var comp = info.components[i];
+            var x = parseInt(comp.x, 10) || 0;
+            var y = parseInt(comp.y, 10) || 0;
+            var w = Math.max(1, parseInt(comp.width, 10) || 1);
+            var h = Math.max(1, parseInt(comp.height, 10) || 1);
+
+            var left = Math.max(0, sourceLeft + x);
+            var top = Math.max(0, sourceTop + y);
+            var right = Math.min(docW, left + w);
+            var bottom = Math.min(docH, top + h);
+            if (right <= left || bottom <= top) continue;
+
+            doc.activeLayer = sourceLayer;
+            var newLayer = sourceLayer.duplicate(sourceLayer, ElementPlacement.PLACEBEFORE);
+            doc.activeLayer = newLayer;
+
+            try {
+                if (newLayer.rasterize) newLayer.rasterize(RasterizeType.ENTIRELAYER);
+            } catch (rasterErr) {}
+
+            doc.selection.select([
+                [left, top],
+                [right, top],
+                [right, bottom],
+                [left, bottom]
+            ]);
+            doc.selection.invert();
+            try {
+                doc.selection.clear();
+            } catch (clearErr) {
+                doc.selection.deselect();
+                try { newLayer.remove(); } catch(removeErr) {}
+                return "ERROR: 清理拆图区域失败，当前图层可能不是可直接编辑的像素图层: " + clearErr.toString();
+            }
+            doc.selection.deselect();
+
+            var meta = {
+                moduleName: moduleName,
+                baseName: comp.baseName || ("component_" + (i + 1)),
+                outputType: outputType,
+                compType: compType,
+                width: w,
+                height: h,
+                sliceSuffix: sliceSuffix,
+                isExport: true,
+                posX: 0,
+                posY: 0
+            };
+            var exportName = buildExportName(meta);
+            setLayerMeta(newLayer.id, meta);
+            newLayer.name = exportName;
+            try {
+                newLayer.move(splitGroup, ElementPlacement.INSIDE);
+            } catch (moveIntoGroupErr) {}
+            createdCount++;
+            createdIds.push(String(newLayer.id));
+        }
+
+        if (info.hideOriginal) {
+            sourceLayer.visible = false;
+        }
+
+        app.preferences.rulerUnits = oldUnit;
+        if (info.returnJson) {
+            return JSON.stringify({
+                status: "SUCCESS",
+                message: "已拆分 " + createdCount + " 个图层",
+                createdIds: createdIds
+            });
+        }
+        return "SUCCESS: 已拆分 " + createdCount + " 个图层";
+    } catch(e) {
+        try { app.preferences.rulerUnits = oldUnit; } catch(unitErr) {}
+        try { app.activeDocument.selection.deselect(); } catch(selErr) {}
+        return "ERROR: " + e.toString() + (e.line ? (" (line " + e.line + ")") : "");
+    }
+}
+
 function setActiveLayerExportFlag(infoStr) {
     try {
         if (app.documents.length === 0) return "ERROR: 没有打开的文档";
@@ -1204,6 +1348,7 @@ function getActiveLayerPreview() {
         app.preferences.rulerUnits = oldUnit;
         return JSON.stringify({
             path: tmpFile.fsName,
+            layerId: layer.id,
             width: w,
             height: h
         });

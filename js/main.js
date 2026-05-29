@@ -433,6 +433,30 @@ document.addEventListener("DOMContentLoaded", function() {
                 ".sub-tab-btn.active { background:#4fc3f7; color:#000; font-weight:bold; }",
                 ".sub-tab-content { display:none; }",
                 ".sub-tab-content.active { display:block; }",
+                ".split-panel { background:#1f1f1f; border:1px solid #444; border-radius:4px; padding:10px; margin-bottom:10px; }",
+                ".split-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }",
+                ".split-field { display:flex; flex-direction:column; gap:4px; min-width:0; }",
+                ".split-field label { color:#aaa; font-size:10px; }",
+                ".split-field input, .split-field select { box-sizing:border-box; width:100%; }",
+                ".split-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }",
+                ".split-list { max-height:150px; overflow:auto; border:1px solid #333; background:#151515; border-radius:3px; margin-top:10px; }",
+                ".split-row { display:grid; grid-template-columns:34px 1fr 56px; gap:6px; align-items:center; padding:5px 6px; border-bottom:1px solid #2a2a2a; font-size:10px; color:#bbb; }",
+                ".split-row.selected { background:#183449; color:#fff; }",
+                ".split-row:last-child { border-bottom:none; }",
+                ".split-thumb { width:28px; height:22px; border:1px solid #444; background:#0f0f0f; object-fit:contain; }",
+                ".split-muted { color:#777; font-size:10px; line-height:1.45; }",
+                ".split-preview-wrap { position:relative; margin-top:10px; height:190px; border:1px solid #333; border-radius:4px; background:#111; overflow:hidden; display:flex; align-items:center; justify-content:center; }",
+                ".split-preview-canvas { max-width:100%; max-height:100%; }",
+                ".split-zoom-btn { position:absolute; top:6px; right:6px; width:24px; height:24px; line-height:22px; text-align:center; border:1px solid #4fc3f7; color:#4fc3f7; background:#1c1c1c; border-radius:3px; cursor:pointer; font-size:14px; z-index:2; }",
+                ".split-modal { position:fixed; left:0; top:0; right:0; bottom:0; width:100vw; height:100vh; background:rgba(0,0,0,0.72); z-index:2147483000; display:none; align-items:center; justify-content:center; }",
+                ".split-modal.active { display:flex; }",
+                ".split-modal-shell { width:92vw; height:88vh; background:#202020; border:1px solid #555; border-radius:6px; display:grid; grid-template-rows:auto 1fr auto; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.6); }",
+                ".split-modal-head, .split-modal-tools { display:flex; align-items:center; gap:8px; padding:8px; border-bottom:1px solid #333; }",
+                ".split-modal-tools { border-top:1px solid #333; border-bottom:none; }",
+                ".split-modal-body { overflow:auto; background:#111; display:flex; align-items:flex-start; justify-content:center; padding:16px; }",
+                ".split-editor-canvas { background:#181818; box-shadow:0 0 0 1px #333; }",
+                ".split-tool-btn { background:#333; border:1px solid #555; color:#ddd; border-radius:3px; padding:5px 10px; cursor:pointer; font-size:11px; }",
+                ".split-tool-btn:hover { border-color:#4fc3f7; color:#fff; }",
                 "#sub-ailab .name-group { display:grid; grid-template-columns:72px minmax(0, 1fr); gap:8px; align-items:start !important; }",
                 "#sub-ailab .name-group > span { width:auto !important; line-height:32px; margin-top:0 !important; }",
                 "#sub-ailab .name-group > input, #sub-ailab .name-group > div { min-width:0; }",
@@ -483,6 +507,58 @@ document.addEventListener("DOMContentLoaded", function() {
 
         buildSubtabRoot(document.getElementById("tab-naming"), [
             { id: "sub-naming-props", label: "\u5c5e\u6027" },
+            {
+                id: "sub-naming-split",
+                label: "\u62c6\u56fe",
+                render: function(pane) {
+                    pane.innerHTML = [
+                        '<div class="title" style="margin-top: 5px;">\u56fe\u5c42\u62c6\u56fe</div>',
+                        '<div class="split-panel">',
+                        '<div class="split-muted">\u4ece\u5f53\u524d\u9009\u4e2d\u7684\u5355\u4e2a UI \u56fe\u5c42\u4e2d\u8bc6\u522b\u900f\u660e\u80cc\u666f\u4e0a\u7684\u72ec\u7acb\u7ec4\u4ef6\uff0c\u62c6\u6210\u591a\u4e2a\u65b0\u56fe\u5c42\uff0c\u5e76\u6309\u5c5e\u6027\u547d\u540d\u89c4\u5219\u6279\u91cf\u5199\u5165\u5143\u6570\u636e\u3002</div>',
+                        '<div class="split-grid" style="margin-top:10px;">',
+                        '<div class="split-field"><label>\u547d\u540d\u524d\u7f00</label><input id="splitBasePrefix" class="name-input" type="text" placeholder="icon"></div>',
+                        '<div class="split-field"><label>\u8d77\u59cb\u7f16\u53f7</label><input id="splitStartIndex" class="name-input" type="number" min="0" step="1" value="1"></div>',
+                        '<div class="split-field"><label>\u7f16\u53f7\u4f4d\u6570</label><input id="splitPadDigits" class="name-input" type="number" min="1" max="4" step="1" value="2"></div>',
+                        '<div class="split-field"><label>\u6267\u884c\u540e</label><select id="splitOriginalMode" class="name-input"><option value="hide">\u9690\u85cf\u539f\u56fe\u5c42</option><option value="keep">\u4fdd\u7559\u539f\u56fe\u5c42</option></select></div>',
+                        '</div>',
+                        '<div style="margin-top:8px;"><button id="btnToggleSplitAdvanced" class="split-tool-btn" type="button" style="width:100%;">\u9ad8\u7ea7\u53c2\u6570</button></div>',
+                        '<div id="splitAdvancedPanel" style="display:none; margin-top:8px; border-top:1px dashed #444; padding-top:8px;">',
+                        '<div class="split-grid">',
+                        '<div class="split-field"><label>\u900f\u660e\u9608\u503c</label><input id="splitAlphaThreshold" class="name-input" type="number" min="1" max="255" step="1" value="48"></div>',
+                        '<div class="split-field"><label>\u80cc\u666f\u5bb9\u5dee</label><input id="splitBgTolerance" class="name-input" type="number" min="0" max="100" step="1" value="34"></div>',
+                        '<div class="split-field"><label>\u6700\u5c0f\u9762\u79ef(px)</label><input id="splitMinArea" class="name-input" type="number" min="1" step="1" value="64"></div>',
+                        '<div class="split-field"><label>\u81a8\u80c0/\u8150\u8680(px)</label><input id="splitMergeGap" class="name-input" type="number" min="0" step="1" value="2"></div>',
+                        '<div class="split-field"><label>\u5916\u6269\u7559\u8fb9(px)</label><input id="splitPadding" class="name-input" type="number" min="0" step="1" value="2"></div>',
+                        '<div class="split-field"><label>&nbsp;</label><button id="btnResetSplitAdvanced" class="split-tool-btn" type="button">\u6062\u590d\u9ed8\u8ba4</button></div>',
+                        '</div>',
+                        '</div>',
+                        '<div class="split-actions">',
+                        '<button id="btnAnalyzeSplit" class="btn-primary" type="button">\u5206\u6790\u7ec4\u4ef6</button>',
+                        '<button id="btnApplySplit" class="btn-primary" type="button" disabled>\u6267\u884c\u62c6\u56fe</button>',
+                        '<button id="btnSplitAndExport" class="btn-primary" type="button" disabled style="grid-column:1 / span 2;">\u62c6\u56fe\u5e76\u5bfc\u51fa</button>',
+                        '</div>',
+                        '<div class="split-muted" style="margin-top:8px; border-top:1px dashed #333; padding-top:8px; display:flex; gap:6px; align-items:center;"><span style="flex-shrink:0;">\u62c6\u56fe\u5bfc\u51fa\u8def\u5f84:</span><span id="splitExportPathLabel" style="flex:1; min-width:0; word-break:break-all;">未设置</span><button id="btnSetSplitExportPath" class="split-tool-btn" type="button" style="padding:2px 8px;">\u66f4\u6539</button></div>',
+                        '<div class="split-preview-wrap"><canvas id="splitPreviewCanvas" class="split-preview-canvas"></canvas><div id="btnOpenSplitEditor" class="split-zoom-btn" title="\u653e\u5927\u7f16\u8f91">\u26f6</div></div>',
+                        '<div id="splitSummary" class="split-muted" style="margin-top:8px;">\u5c1a\u672a\u5206\u6790</div>',
+                        '<div id="splitList" class="split-list"><div class="split-muted" style="padding:12px; text-align:center;">\u70b9\u51fb\u201c\u5206\u6790\u7ec4\u4ef6\u201d\u540e\u9884\u89c8\u5f85\u62c6\u5206\u533a\u57df</div></div>',
+                        '</div>',
+                        '<div id="splitEditorModal" class="split-modal">',
+                        '<div class="split-modal-shell">',
+                        '<div class="split-modal-head"><strong style="color:#ddd;">\u5019\u9009\u6846\u7f16\u8f91</strong><span id="splitEditorInfo" class="split-muted" style="flex:1;"></span><button id="btnCloseSplitEditor" class="split-tool-btn" type="button">\u5173\u95ed</button></div>',
+                        '<div class="split-modal-body"><canvas id="splitEditorCanvas" class="split-editor-canvas"></canvas></div>',
+                        '<div class="split-modal-tools">',
+                        '<button id="btnAddSplitBox" class="split-tool-btn" type="button">\u65b0\u589e\u9009\u533a</button>',
+                        '<button id="btnMergeSplitBoxes" class="split-tool-btn" type="button">\u5408\u5e76\u9009\u4e2d</button>',
+                        '<button id="btnSplitBoxVertical" class="split-tool-btn" type="button">\u7eb5\u5411\u62c6\u5206</button>',
+                        '<button id="btnSplitBoxHorizontal" class="split-tool-btn" type="button">\u6c34\u5e73\u62c6\u5206</button>',
+                        '<button id="btnDeleteSplitBoxes" class="split-tool-btn" type="button">\u5220\u9664\u9009\u4e2d</button>',
+                        '<span class="split-muted">\u70b9\u51fb\u6846\u9009\u4e2d\uff0cCtrl+\u70b9\u51fb\u53ef\u591a\u9009\u3002</span>',
+                        '</div>',
+                        '</div>',
+                        '</div>'
+                    ].join("");
+                }
+            },
             {
                 id: "sub-naming-clear",
                 label: "AI\u6e05\u6670",
@@ -1308,6 +1384,1174 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 
     // ==========================================
+    // 1.5 拆图：从单个透明 UI 图层识别组件并拆成多个图层
+    // ==========================================
+    var splitState = {
+        components: [],
+        sourceLayerId: null,
+        sourceWidth: 0,
+        sourceHeight: 0,
+        previewWidth: 0,
+        previewHeight: 0
+    };
+    var uiSplit = {
+        basePrefix: document.getElementById("splitBasePrefix"),
+        startIndex: document.getElementById("splitStartIndex"),
+        padDigits: document.getElementById("splitPadDigits"),
+        toggleAdvanced: document.getElementById("btnToggleSplitAdvanced"),
+        advancedPanel: document.getElementById("splitAdvancedPanel"),
+        resetAdvanced: document.getElementById("btnResetSplitAdvanced"),
+        alphaThreshold: document.getElementById("splitAlphaThreshold"),
+        bgTolerance: document.getElementById("splitBgTolerance"),
+        minArea: document.getElementById("splitMinArea"),
+        mergeGap: document.getElementById("splitMergeGap"),
+        padding: document.getElementById("splitPadding"),
+        originalMode: document.getElementById("splitOriginalMode"),
+        analyze: document.getElementById("btnAnalyzeSplit"),
+        apply: document.getElementById("btnApplySplit"),
+        splitAndExport: document.getElementById("btnSplitAndExport"),
+        exportPathLabel: document.getElementById("splitExportPathLabel"),
+        setExportPath: document.getElementById("btnSetSplitExportPath"),
+        summary: document.getElementById("splitSummary"),
+        list: document.getElementById("splitList"),
+        previewCanvas: document.getElementById("splitPreviewCanvas"),
+        openEditor: document.getElementById("btnOpenSplitEditor"),
+        modal: document.getElementById("splitEditorModal"),
+        closeEditor: document.getElementById("btnCloseSplitEditor"),
+        editorCanvas: document.getElementById("splitEditorCanvas"),
+        editorInfo: document.getElementById("splitEditorInfo"),
+        addBox: document.getElementById("btnAddSplitBox"),
+        mergeBoxes: document.getElementById("btnMergeSplitBoxes"),
+        splitVertical: document.getElementById("btnSplitBoxVertical"),
+        splitHorizontal: document.getElementById("btnSplitBoxHorizontal"),
+        deleteBoxes: document.getElementById("btnDeleteSplitBoxes")
+    };
+    var splitPreviewImage = null;
+    var splitNextBoxId = 1;
+    var splitDragState = null;
+    var splitEditorZoom = 1;
+    var savedSplitExportPath = (localStorage.getItem("UILink_SplitExportPath") || "").replace(/\\/g, "/");
+
+    function padSplitNumber(num, digits) {
+        var s = String(num);
+        while (s.length < digits) s = "0" + s;
+        return s;
+    }
+
+    function getSplitBaseName(index) {
+        var prefix = (uiSplit.basePrefix && uiSplit.basePrefix.value.trim()) || "component";
+        var start = parseInt(uiSplit.startIndex && uiSplit.startIndex.value, 10);
+        var digits = parseInt(uiSplit.padDigits && uiSplit.padDigits.value, 10);
+        if (!isFinite(start)) start = 1;
+        if (!isFinite(digits) || digits < 1) digits = 2;
+        return prefix + "_" + padSplitNumber(start + index, digits);
+    }
+
+    function boxesTouchOrOverlap(a, b, gap) {
+        return !(a.x2 + gap < b.x1 || b.x2 + gap < a.x1 || a.y2 + gap < b.y1 || b.y2 + gap < a.y1);
+    }
+
+    function mergeComponentBoxes(boxes, gap) {
+        var changed = true;
+        while (changed) {
+            changed = false;
+            for (var i = 0; i < boxes.length; i++) {
+                for (var j = i + 1; j < boxes.length; j++) {
+                    if (!boxesTouchOrOverlap(boxes[i], boxes[j], gap)) continue;
+                    boxes[i] = {
+                        x1: Math.min(boxes[i].x1, boxes[j].x1),
+                        y1: Math.min(boxes[i].y1, boxes[j].y1),
+                        x2: Math.max(boxes[i].x2, boxes[j].x2),
+                        y2: Math.max(boxes[i].y2, boxes[j].y2),
+                        area: boxes[i].area + boxes[j].area
+                    };
+                    boxes.splice(j, 1);
+                    changed = true;
+                    break;
+                }
+                if (changed) break;
+            }
+        }
+        return boxes;
+    }
+
+    function normalizeSplitBoxes(boxes) {
+        return boxes.map(function(box) {
+            box.id = box.id || ("box_" + (splitNextBoxId++));
+            box.selected = !!box.selected;
+            return box;
+        });
+    }
+
+    function getSelectedSplitBoxes() {
+        return splitState.components.filter(function(box) { return !!box.selected; });
+    }
+
+    function clearSplitSelection() {
+        splitState.components.forEach(function(box) { box.selected = false; });
+    }
+
+    function colorDistanceSq(a, b) {
+        var dr = a.r - b.r;
+        var dg = a.g - b.g;
+        var db = a.b - b.b;
+        return dr * dr + dg * dg + db * db;
+    }
+
+    function collectCornerBackgroundColors(data, w, h) {
+        var sampleSize = Math.max(12, Math.min(48, Math.floor(Math.min(w, h) / 6)));
+        var buckets = {};
+        var regions = [
+            { x1: 0, y1: 0, x2: sampleSize, y2: sampleSize },
+            { x1: Math.max(0, w - sampleSize), y1: 0, x2: w, y2: sampleSize },
+            { x1: 0, y1: Math.max(0, h - sampleSize), x2: sampleSize, y2: h },
+            { x1: Math.max(0, w - sampleSize), y1: Math.max(0, h - sampleSize), x2: w, y2: h }
+        ];
+
+        regions.forEach(function(region) {
+            for (var y = region.y1; y < region.y2; y += 2) {
+                for (var x = region.x1; x < region.x2; x += 2) {
+                    var idx = (y * w + x) * 4;
+                    if (data[idx + 3] < 240) continue;
+                    var r = data[idx], g = data[idx + 1], b = data[idx + 2];
+                    var max = Math.max(r, g, b);
+                    var min = Math.min(r, g, b);
+                    if (max - min > 18) continue;
+                    var qr = Math.round(r / 8) * 8;
+                    var qg = Math.round(g / 8) * 8;
+                    var qb = Math.round(b / 8) * 8;
+                    var key = qr + "," + qg + "," + qb;
+                    if (!buckets[key]) buckets[key] = { r: qr, g: qg, b: qb, count: 0 };
+                    buckets[key].count++;
+                }
+            }
+        });
+
+        return Object.keys(buckets).map(function(key) {
+            return buckets[key];
+        }).sort(function(a, b) {
+            return b.count - a.count;
+        }).slice(0, 6);
+    }
+
+    function detectSplitComponents(imageEl, options) {
+        var canvas = document.createElement("canvas");
+        var w = imageEl.naturalWidth || imageEl.width;
+        var h = imageEl.naturalHeight || imageEl.height;
+        canvas.width = w;
+        canvas.height = h;
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(imageEl, 0, 0);
+        var imageData = ctx.getImageData(0, 0, w, h);
+        var data = imageData.data;
+        var minArea = options.minArea;
+        var bgColors = collectCornerBackgroundColors(data, w, h);
+        var bgTolerance = options.bgTolerance;
+        var bgToleranceSq = bgTolerance * bgTolerance;
+
+        function alphaAt(idx) {
+            return data[idx * 4 + 3];
+        }
+
+        function isBackgroundPixel(idx) {
+            if (!bgColors.length) return false;
+            var offset = idx * 4;
+            var c = { r: data[offset], g: data[offset + 1], b: data[offset + 2] };
+            for (var i = 0; i < bgColors.length; i++) {
+                if (colorDistanceSq(c, bgColors[i]) <= bgToleranceSq) return true;
+            }
+            return false;
+        }
+
+        function isForeground(idx, activeThreshold) {
+            return alphaAt(idx) > activeThreshold && !isBackgroundPixel(idx);
+        }
+
+        function scanComponents(activeThreshold) {
+            var visited = new Uint8Array(w * h);
+            var found = [];
+
+            for (var y = 0; y < h; y++) {
+                for (var x = 0; x < w; x++) {
+                    var startIdx = y * w + x;
+                    if (visited[startIdx] || !isForeground(startIdx, activeThreshold)) continue;
+
+                    var queue = [startIdx];
+                    var head = 0;
+                    visited[startIdx] = 1;
+                    var x1 = x, x2 = x, y1 = y, y2 = y, area = 0;
+
+                    while (head < queue.length) {
+                        var idx = queue[head++];
+                        var cx = idx % w;
+                        var cy = Math.floor(idx / w);
+                        area++;
+                        if (cx < x1) x1 = cx;
+                        if (cx > x2) x2 = cx;
+                        if (cy < y1) y1 = cy;
+                        if (cy > y2) y2 = cy;
+
+                        var neighbors = [idx - 1, idx + 1, idx - w, idx + w];
+                        for (var n = 0; n < neighbors.length; n++) {
+                            var ni = neighbors[n];
+                            if (ni < 0 || ni >= visited.length || visited[ni]) continue;
+                            var nx = ni % w;
+                            if ((n === 0 && nx === w - 1) || (n === 1 && nx === 0)) continue;
+                            if (!isForeground(ni, activeThreshold)) continue;
+                            visited[ni] = 1;
+                            queue.push(ni);
+                        }
+                    }
+
+                    if (area >= minArea) {
+                        found.push({ x1: x1, y1: y1, x2: x2, y2: y2, area: area });
+                    }
+                }
+            }
+
+            return mergeComponentBoxes(found, options.mergeGap);
+        }
+
+        function buildForegroundMask(activeThreshold) {
+            var mask = new Uint8Array(w * h);
+            for (var i = 0; i < mask.length; i++) {
+                mask[i] = isForeground(i, activeThreshold) ? 1 : 0;
+            }
+            return mask;
+        }
+
+        function morphMask(mask, radius, mode) {
+            radius = Math.max(0, parseInt(radius, 10) || 0);
+            if (!radius) return mask;
+            var src = mask;
+            var out = new Uint8Array(mask.length);
+            for (var y = 0; y < h; y++) {
+                for (var x = 0; x < w; x++) {
+                    var hit = mode === "erode" ? 1 : 0;
+                    for (var yy = Math.max(0, y - radius); yy <= Math.min(h - 1, y + radius); yy++) {
+                        var row = yy * w;
+                        for (var xx = Math.max(0, x - radius); xx <= Math.min(w - 1, x + radius); xx++) {
+                            var value = src[row + xx] ? 1 : 0;
+                            if (mode === "dilate" && value) {
+                                hit = 1;
+                                yy = h;
+                                break;
+                            }
+                            if (mode === "erode" && !value) {
+                                hit = 0;
+                                yy = h;
+                                break;
+                            }
+                        }
+                    }
+                    out[y * w + x] = hit;
+                }
+            }
+            return out;
+        }
+
+        function closeMask(mask, radius) {
+            return morphMask(morphMask(mask, radius, "dilate"), radius, "erode");
+        }
+
+        function scanMaskComponents(mask) {
+            var visited = new Uint8Array(w * h);
+            var found = [];
+            for (var y = 0; y < h; y++) {
+                for (var x = 0; x < w; x++) {
+                    var startIdx = y * w + x;
+                    if (visited[startIdx] || !mask[startIdx]) continue;
+                    var queue = [startIdx];
+                    var head = 0;
+                    visited[startIdx] = 1;
+                    var x1 = x, x2 = x, y1 = y, y2 = y, area = 0;
+                    while (head < queue.length) {
+                        var idx = queue[head++];
+                        var cx = idx % w;
+                        var cy = Math.floor(idx / w);
+                        area++;
+                        if (cx < x1) x1 = cx;
+                        if (cx > x2) x2 = cx;
+                        if (cy < y1) y1 = cy;
+                        if (cy > y2) y2 = cy;
+                        var neighbors = [idx - 1, idx + 1, idx - w, idx + w];
+                        for (var n = 0; n < neighbors.length; n++) {
+                            var ni = neighbors[n];
+                            if (ni < 0 || ni >= visited.length || visited[ni] || !mask[ni]) continue;
+                            var nx = ni % w;
+                            if ((n === 0 && nx === w - 1) || (n === 1 && nx === 0)) continue;
+                            visited[ni] = 1;
+                            queue.push(ni);
+                        }
+                    }
+                    if (area >= minArea) found.push({ x1: x1, y1: y1, x2: x2, y2: y2, area: area });
+                }
+            }
+            return found;
+        }
+
+        function trimBoxToMask(mask, box) {
+            var x1 = box.x1, y1 = box.y1, x2 = box.x2, y2 = box.y2;
+            var minX = x2, minY = y2, maxX = x1, maxY = y1;
+            var area = 0;
+            for (var y = y1; y <= y2; y++) {
+                var row = y * w;
+                for (var x = x1; x <= x2; x++) {
+                    if (!mask[row + x]) continue;
+                    area++;
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+            if (!area) return null;
+            return { x1: minX, y1: minY, x2: maxX, y2: maxY, area: area };
+        }
+
+        function findGaps(mask, box, axis) {
+            var gaps = [];
+            var runStart = -1;
+            var minGap = Math.max(6, parseInt(options.mergeGap, 10) || 0);
+            var length = axis === "x" ? (box.x2 - box.x1 + 1) : (box.y2 - box.y1 + 1);
+            var span = axis === "x" ? (box.y2 - box.y1 + 1) : (box.x2 - box.x1 + 1);
+            var maxNoise = Math.max(0, Math.floor(span * 0.012));
+
+            for (var offset = 0; offset < length; offset++) {
+                var count = 0;
+                if (axis === "x") {
+                    var x = box.x1 + offset;
+                    for (var y = box.y1; y <= box.y2; y++) count += mask[y * w + x] ? 1 : 0;
+                } else {
+                    var yy = box.y1 + offset;
+                    var row = yy * w;
+                    for (var xx = box.x1; xx <= box.x2; xx++) count += mask[row + xx] ? 1 : 0;
+                }
+
+                if (count <= maxNoise) {
+                    if (runStart === -1) runStart = offset;
+                } else if (runStart !== -1) {
+                    if (offset - runStart >= minGap) {
+                        gaps.push({ start: runStart, end: offset - 1, size: offset - runStart });
+                    }
+                    runStart = -1;
+                }
+            }
+
+            if (runStart !== -1 && length - runStart >= minGap) {
+                gaps.push({ start: runStart, end: length - 1, size: length - runStart });
+            }
+
+            return gaps.filter(function(gap) {
+                return gap.start > 0 && gap.end < length - 1;
+            });
+        }
+
+        function xyCutComponents(activeThreshold) {
+            var mask = buildForegroundMask(activeThreshold);
+            var root = trimBoxToMask(mask, { x1: 0, y1: 0, x2: w - 1, y2: h - 1 });
+            if (!root) return [];
+            var results = [];
+            var maxDepth = 32;
+
+            function splitBox(box, depth) {
+                box = trimBoxToMask(mask, box);
+                if (!box) return;
+
+                var bw = box.x2 - box.x1 + 1;
+                var bh = box.y2 - box.y1 + 1;
+                if (box.area < minArea || depth > maxDepth || bw <= 2 || bh <= 2) {
+                    if (box.area >= minArea) results.push(box);
+                    return;
+                }
+
+                var verticalGaps = findGaps(mask, box, "x");
+                var horizontalGaps = findGaps(mask, box, "y");
+                var bestV = verticalGaps.sort(function(a, b) { return b.size - a.size; })[0];
+                var bestH = horizontalGaps.sort(function(a, b) { return b.size - a.size; })[0];
+                var vScore = bestV ? bestV.size / Math.max(1, bw) : 0;
+                var hScore = bestH ? bestH.size / Math.max(1, bh) : 0;
+
+                if (!bestV && !bestH) {
+                    results.push(box);
+                    return;
+                }
+
+                if (vScore >= hScore) {
+                    var cutX1 = box.x1 + bestV.start;
+                    var cutX2 = box.x1 + bestV.end;
+                    splitBox({ x1: box.x1, y1: box.y1, x2: cutX1 - 1, y2: box.y2 }, depth + 1);
+                    splitBox({ x1: cutX2 + 1, y1: box.y1, x2: box.x2, y2: box.y2 }, depth + 1);
+                } else {
+                    var cutY1 = box.y1 + bestH.start;
+                    var cutY2 = box.y1 + bestH.end;
+                    splitBox({ x1: box.x1, y1: box.y1, x2: box.x2, y2: cutY1 - 1 }, depth + 1);
+                    splitBox({ x1: box.x1, y1: cutY2 + 1, x2: box.x2, y2: box.y2 }, depth + 1);
+                }
+            }
+
+            splitBox(root, 0);
+            return results;
+        }
+
+        function coverageScore(boxes) {
+            if (!boxes.length) return 0;
+            var maxArea = 0;
+            for (var i = 0; i < boxes.length; i++) {
+                var boxArea = (boxes[i].x2 - boxes[i].x1 + 1) * (boxes[i].y2 - boxes[i].y1 + 1);
+                if (boxArea > maxArea) maxArea = boxArea;
+            }
+            return maxArea / Math.max(1, w * h);
+        }
+
+        var thresholds = [];
+        var userThreshold = parseInt(options.alphaThreshold, 10) || 48;
+        [userThreshold, 24, 48, 80, 112, 144, 176].forEach(function(value) {
+            value = Math.max(1, Math.min(254, value));
+            if (thresholds.indexOf(value) === -1) thresholds.push(value);
+        });
+
+        var boxes = [];
+        var bestBoxes = [];
+        var bestCount = 0;
+        for (var t = 0; t < thresholds.length; t++) {
+            var connectedCandidate = scanComponents(thresholds[t]);
+            var morphRadius = Math.max(0, Math.min(8, parseInt(options.mergeGap, 10) || 0));
+            var morphCandidate = scanMaskComponents(closeMask(buildForegroundMask(thresholds[t]), morphRadius));
+            var cutCandidate = xyCutComponents(thresholds[t]);
+            var candidate = connectedCandidate;
+            if (morphCandidate.length > candidate.length) candidate = morphCandidate;
+            if (cutCandidate.length > candidate.length) candidate = cutCandidate;
+            if (candidate.length > bestCount) {
+                bestBoxes = candidate;
+                bestCount = candidate.length;
+            }
+            if (candidate.length > 1 && coverageScore(candidate) < 0.82) {
+                boxes = candidate;
+                break;
+            }
+        }
+
+        if (!boxes.length) boxes = bestBoxes;
+        boxes.sort(function(a, b) {
+            if (Math.abs(a.y1 - b.y1) > 8) return a.y1 - b.y1;
+            return a.x1 - b.x1;
+        });
+
+        return boxes.map(function(box) {
+            var pad = options.padding;
+            var x1 = Math.max(0, box.x1 - pad);
+            var y1 = Math.max(0, box.y1 - pad);
+            var x2 = Math.min(w - 1, box.x2 + pad);
+            var y2 = Math.min(h - 1, box.y2 + pad);
+            return {
+                x: x1,
+                y: y1,
+                width: x2 - x1 + 1,
+                height: y2 - y1 + 1,
+                area: box.area
+            };
+        });
+    }
+
+    function drawSplitCanvas(canvas, fitToContainer) {
+        if (!canvas || !splitPreviewImage) return;
+        var ctx = canvas.getContext("2d");
+        var iw = splitPreviewImage.naturalWidth || splitPreviewImage.width;
+        var ih = splitPreviewImage.naturalHeight || splitPreviewImage.height;
+        var maxW = fitToContainer ? 420 : iw;
+        var maxH = fitToContainer ? 180 : ih;
+        var scale = fitToContainer ? Math.min(maxW / iw, maxH / ih, 1) : splitEditorZoom;
+        canvas.width = Math.max(1, Math.round(iw * scale));
+        canvas.height = Math.max(1, Math.round(ih * scale));
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(splitPreviewImage, 0, 0, canvas.width, canvas.height);
+        ctx.lineWidth = Math.max(1, Math.round(2 * scale));
+        ctx.font = Math.max(10, Math.round(11 * scale)) + "px Arial";
+        splitState.components.forEach(function(box, index) {
+            var x = box.x * scale;
+            var y = box.y * scale;
+            var bw = box.width * scale;
+            var bh = box.height * scale;
+            ctx.strokeStyle = box.selected ? "#ffca28" : "#00e676";
+            ctx.fillStyle = box.selected ? "rgba(255,202,40,0.16)" : "rgba(0,230,118,0.10)";
+            ctx.fillRect(x, y, bw, bh);
+            ctx.strokeRect(x, y, bw, bh);
+            if (box.selected && !fitToContainer) {
+                var hs = 7;
+                var handles = [
+                    [x, y], [x + bw / 2, y], [x + bw, y],
+                    [x, y + bh / 2], [x + bw, y + bh / 2],
+                    [x, y + bh], [x + bw / 2, y + bh], [x + bw, y + bh]
+                ];
+                ctx.fillStyle = "#ffca28";
+                ctx.strokeStyle = "#111";
+                handles.forEach(function(point) {
+                    ctx.fillRect(point[0] - hs / 2, point[1] - hs / 2, hs, hs);
+                    ctx.strokeRect(point[0] - hs / 2, point[1] - hs / 2, hs, hs);
+                });
+            }
+            ctx.fillStyle = box.selected ? "#ffca28" : "#00e676";
+            ctx.fillText(String(index + 1), x + 3, y + 12);
+        });
+        canvas.setAttribute("data-scale", String(scale));
+    }
+
+    function renderSplitPreview() {
+        drawSplitCanvas(uiSplit.previewCanvas, true);
+        drawSplitCanvas(uiSplit.editorCanvas, false);
+        if (uiSplit.editorInfo) {
+            uiSplit.editorInfo.textContent = splitState.components.length + " 个候选框，已选 " + getSelectedSplitBoxes().length + " 个，缩放 " + Math.round(splitEditorZoom * 100) + "%";
+        }
+    }
+
+    function findBoxAtCanvasPoint(canvas, clientX, clientY) {
+        if (!canvas) return null;
+        var rect = canvas.getBoundingClientRect();
+        var scale = parseFloat(canvas.getAttribute("data-scale") || "1") || 1;
+        var x = (clientX - rect.left) / scale;
+        var y = (clientY - rect.top) / scale;
+        for (var i = splitState.components.length - 1; i >= 0; i--) {
+            var box = splitState.components[i];
+            if (x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height) return box;
+        }
+        return null;
+    }
+
+    function canvasPointToImagePoint(canvas, clientX, clientY) {
+        var rect = canvas.getBoundingClientRect();
+        var scale = parseFloat(canvas.getAttribute("data-scale") || "1") || 1;
+        return {
+            x: (clientX - rect.left) / scale,
+            y: (clientY - rect.top) / scale,
+            scale: scale
+        };
+    }
+
+    function getBoxHandleAtPoint(canvas, box, clientX, clientY) {
+        var pt = canvasPointToImagePoint(canvas, clientX, clientY);
+        var handle = Math.max(6 / pt.scale, 4);
+        var left = Math.abs(pt.x - box.x) <= handle;
+        var right = Math.abs(pt.x - (box.x + box.width)) <= handle;
+        var top = Math.abs(pt.y - box.y) <= handle;
+        var bottom = Math.abs(pt.y - (box.y + box.height)) <= handle;
+        var insideX = pt.x >= box.x - handle && pt.x <= box.x + box.width + handle;
+        var insideY = pt.y >= box.y - handle && pt.y <= box.y + box.height + handle;
+        if (left && top) return "nw";
+        if (right && top) return "ne";
+        if (left && bottom) return "sw";
+        if (right && bottom) return "se";
+        if (left && insideY) return "w";
+        if (right && insideY) return "e";
+        if (top && insideX) return "n";
+        if (bottom && insideX) return "s";
+        if (pt.x >= box.x && pt.x <= box.x + box.width && pt.y >= box.y && pt.y <= box.y + box.height) return "move";
+        return "";
+    }
+
+    function clampSplitBox(box) {
+        var iw = splitState.previewWidth || (splitPreviewImage && (splitPreviewImage.naturalWidth || splitPreviewImage.width)) || 1;
+        var ih = splitState.previewHeight || (splitPreviewImage && (splitPreviewImage.naturalHeight || splitPreviewImage.height)) || 1;
+        if (box.width < 2) box.width = 2;
+        if (box.height < 2) box.height = 2;
+        if (box.x < 0) box.x = 0;
+        if (box.y < 0) box.y = 0;
+        if (box.x + box.width > iw) box.width = iw - box.x;
+        if (box.y + box.height > ih) box.height = ih - box.y;
+        box.x = Math.round(box.x);
+        box.y = Math.round(box.y);
+        box.width = Math.max(2, Math.round(box.width));
+        box.height = Math.max(2, Math.round(box.height));
+        box.area = box.width * box.height;
+    }
+
+    function drawSplitThumb(canvas, box) {
+        if (!canvas || !splitPreviewImage) return;
+        var ctx = canvas.getContext("2d");
+        var cw = canvas.width;
+        var ch = canvas.height;
+        ctx.clearRect(0, 0, cw, ch);
+        for (var yy = 0; yy < ch; yy += 6) {
+            for (var xx = 0; xx < cw; xx += 6) {
+                ctx.fillStyle = ((xx + yy) / 6) % 2 === 0 ? "#333" : "#555";
+                ctx.fillRect(xx, yy, 6, 6);
+            }
+        }
+        var scale = Math.min(cw / Math.max(1, box.width), ch / Math.max(1, box.height));
+        var dw = Math.max(1, Math.round(box.width * scale));
+        var dh = Math.max(1, Math.round(box.height * scale));
+        var dx = Math.round((cw - dw) / 2);
+        var dy = Math.round((ch - dh) / 2);
+        try {
+            ctx.drawImage(splitPreviewImage, box.x, box.y, box.width, box.height, dx, dy, dw, dh);
+        } catch (e) {}
+    }
+
+    function renderSplitList() {
+        if (!uiSplit.list || !uiSplit.summary) return;
+        uiSplit.list.innerHTML = "";
+        if (!splitState.components.length) {
+            uiSplit.summary.textContent = "未检测到可拆分组件，可尝试降低透明阈值或最小面积。";
+            if (uiSplit.apply) uiSplit.apply.disabled = true;
+            if (uiSplit.splitAndExport) uiSplit.splitAndExport.disabled = true;
+            renderSplitPreview();
+            return;
+        }
+
+        uiSplit.summary.textContent = "已检测到 " + splitState.components.length + " 个组件，执行后将按当前属性规则批量命名。";
+        splitState.components.forEach(function(comp, index) {
+            var row = document.createElement("div");
+            row.className = "split-row" + (comp.selected ? " selected" : "");
+            var thumb = document.createElement("canvas");
+            thumb.className = "split-thumb";
+            thumb.width = 28;
+            thumb.height = 22;
+            drawSplitThumb(thumb, comp);
+            var name = document.createElement("div");
+            name.textContent = getSplitBaseName(index);
+            var size = document.createElement("div");
+            size.textContent = Math.round(comp.width) + "x" + Math.round(comp.height);
+            row.appendChild(thumb);
+            row.appendChild(name);
+            row.appendChild(size);
+            row.addEventListener("click", function(e) {
+                if (!e.ctrlKey && !e.metaKey) clearSplitSelection();
+                comp.selected = !comp.selected;
+                renderSplitList();
+            });
+            uiSplit.list.appendChild(row);
+        });
+        if (uiSplit.apply) uiSplit.apply.disabled = false;
+        if (uiSplit.splitAndExport) uiSplit.splitAndExport.disabled = false;
+        renderSplitPreview();
+    }
+
+    function buildSplitApplyInfo(options) {
+        options = options || {};
+        var splitPrefix = (uiSplit.basePrefix && uiSplit.basePrefix.value.trim()) || "component";
+        var finalOutputType = "atlas:" + splitPrefix;
+        var scaleX = splitState.sourceWidth / Math.max(1, splitState.previewWidth);
+        var scaleY = splitState.sourceHeight / Math.max(1, splitState.previewHeight);
+        return {
+            moduleName: (uiNaming.root && uiNaming.root.value.trim()) || (currentLayerInfo && currentLayerInfo.docName) || "",
+            outputType: finalOutputType,
+            compType: (uiNaming.comp && uiNaming.comp.value) || "image",
+            isExport: true,
+            sliceSuffix: "0,0,0,0",
+            hideOriginal: !uiSplit.originalMode || uiSplit.originalMode.value !== "keep",
+            sourceLayerId: splitState.sourceLayerId,
+            returnJson: !!options.returnJson,
+            components: splitState.components.map(function(comp, index) {
+                return {
+                    baseName: getSplitBaseName(index),
+                    x: Math.round(comp.x * scaleX),
+                    y: Math.round(comp.y * scaleY),
+                    width: Math.max(1, Math.round(comp.width * scaleX)),
+                    height: Math.max(1, Math.round(comp.height * scaleY))
+                };
+            })
+        };
+    }
+
+    if (uiSplit.basePrefix) {
+        uiSplit.basePrefix.value = uiSplit.basePrefix.value || "component";
+    }
+
+    function updateSplitExportPathLabels() {
+        if (uiSplit.exportPathLabel) uiSplit.exportPathLabel.textContent = savedSplitExportPath || "未设置";
+    }
+    updateSplitExportPathLabels();
+
+    function chooseSplitExportPath(callback) {
+        setStatus("请选择拆图导出路径...", "warning");
+        csInterface.evalScript("selectOutputFolderDialog()", function(result) {
+            if (!result || result === "CANCELLED" || result.indexOf("ERROR") === 0) {
+                setStatus("已取消选择拆图导出路径", "warning");
+                if (callback) callback(false);
+                return;
+            }
+            savedSplitExportPath = result.replace(/\\/g, "/");
+            localStorage.setItem("UILink_SplitExportPath", savedSplitExportPath);
+            updateSplitExportPathLabels();
+            setStatus("已更新拆图导出路径", "");
+            logMsg("[Split Export] export dir: " + savedSplitExportPath);
+            if (callback) callback(true);
+        });
+    }
+
+    if (uiSplit.setExportPath) {
+        uiSplit.setExportPath.addEventListener("click", function() {
+            chooseSplitExportPath();
+        });
+    }
+
+    function resetSplitAdvancedDefaults() {
+        if (uiSplit.alphaThreshold) uiSplit.alphaThreshold.value = "48";
+        if (uiSplit.bgTolerance) uiSplit.bgTolerance.value = "34";
+        if (uiSplit.minArea) uiSplit.minArea.value = "64";
+        if (uiSplit.mergeGap) uiSplit.mergeGap.value = "2";
+        if (uiSplit.padding) uiSplit.padding.value = "2";
+        setStatus("拆图高级参数已恢复默认", "");
+    }
+
+    if (uiSplit.toggleAdvanced) {
+        uiSplit.toggleAdvanced.addEventListener("click", function() {
+            if (!uiSplit.advancedPanel) return;
+            var willShow = uiSplit.advancedPanel.style.display === "none" || !uiSplit.advancedPanel.style.display;
+            uiSplit.advancedPanel.style.display = willShow ? "block" : "none";
+            uiSplit.toggleAdvanced.textContent = willShow ? "收起高级参数" : "高级参数";
+        });
+    }
+
+    if (uiSplit.resetAdvanced) {
+        uiSplit.resetAdvanced.addEventListener("click", function() {
+            resetSplitAdvancedDefaults();
+        });
+    }
+
+    [uiSplit.basePrefix, uiSplit.startIndex, uiSplit.padDigits].forEach(function(el) {
+        if (!el) return;
+        el.addEventListener("input", function() {
+            if (splitState.components.length) renderSplitList();
+        });
+        el.addEventListener("change", function() {
+            if (splitState.components.length) renderSplitList();
+        });
+    });
+
+    function bindSplitCanvasSelection(canvas) {
+        if (!canvas) return;
+        canvas.addEventListener("click", function(e) {
+            var box = findBoxAtCanvasPoint(canvas, e.clientX, e.clientY);
+            if (!box) {
+                if (!e.ctrlKey && !e.metaKey) clearSplitSelection();
+            } else {
+                if (!e.ctrlKey && !e.metaKey) clearSplitSelection();
+                box.selected = !box.selected;
+            }
+            renderSplitList();
+        });
+    }
+
+    bindSplitCanvasSelection(uiSplit.previewCanvas);
+
+    if (uiSplit.editorCanvas) {
+        uiSplit.editorCanvas.addEventListener("mousedown", function(e) {
+            var box = findBoxAtCanvasPoint(uiSplit.editorCanvas, e.clientX, e.clientY);
+            if (!box) {
+                if (!e.ctrlKey && !e.metaKey) clearSplitSelection();
+                splitDragState = null;
+                renderSplitList();
+                return;
+            }
+
+            var mode = getBoxHandleAtPoint(uiSplit.editorCanvas, box, e.clientX, e.clientY) || "move";
+            if (!e.ctrlKey && !e.metaKey && !box.selected) clearSplitSelection();
+            box.selected = true;
+            var pt = canvasPointToImagePoint(uiSplit.editorCanvas, e.clientX, e.clientY);
+            splitDragState = {
+                box: box,
+                mode: mode,
+                startX: pt.x,
+                startY: pt.y,
+                origX: box.x,
+                origY: box.y,
+                origW: box.width,
+                origH: box.height
+            };
+            renderSplitList();
+            e.preventDefault();
+        });
+
+        uiSplit.editorCanvas.addEventListener("mousemove", function(e) {
+            if (splitDragState) return;
+            var box = findBoxAtCanvasPoint(uiSplit.editorCanvas, e.clientX, e.clientY);
+            var mode = box ? getBoxHandleAtPoint(uiSplit.editorCanvas, box, e.clientX, e.clientY) : "";
+            var cursorMap = {
+                n: "ns-resize",
+                s: "ns-resize",
+                e: "ew-resize",
+                w: "ew-resize",
+                nw: "nwse-resize",
+                se: "nwse-resize",
+                ne: "nesw-resize",
+                sw: "nesw-resize",
+                move: "move"
+            };
+            uiSplit.editorCanvas.style.cursor = cursorMap[mode] || "default";
+        });
+
+        uiSplit.editorCanvas.addEventListener("wheel", function(e) {
+            e.preventDefault();
+            var nextZoom = splitEditorZoom * (e.deltaY < 0 ? 1.12 : 0.89);
+            splitEditorZoom = Math.max(0.25, Math.min(6, nextZoom));
+            renderSplitPreview();
+        });
+    }
+
+    document.addEventListener("mousemove", function(e) {
+        if (!splitDragState || !uiSplit.editorCanvas) return;
+        var pt = canvasPointToImagePoint(uiSplit.editorCanvas, e.clientX, e.clientY);
+        var dx = pt.x - splitDragState.startX;
+        var dy = pt.y - splitDragState.startY;
+        var box = splitDragState.box;
+        var mode = splitDragState.mode;
+
+        box.x = splitDragState.origX;
+        box.y = splitDragState.origY;
+        box.width = splitDragState.origW;
+        box.height = splitDragState.origH;
+
+        if (mode === "move") {
+            box.x = splitDragState.origX + dx;
+            box.y = splitDragState.origY + dy;
+        } else {
+            if (mode.indexOf("w") !== -1) {
+                box.x = splitDragState.origX + dx;
+                box.width = splitDragState.origW - dx;
+            }
+            if (mode.indexOf("e") !== -1) {
+                box.width = splitDragState.origW + dx;
+            }
+            if (mode.indexOf("n") !== -1) {
+                box.y = splitDragState.origY + dy;
+                box.height = splitDragState.origH - dy;
+            }
+            if (mode.indexOf("s") !== -1) {
+                box.height = splitDragState.origH + dy;
+            }
+        }
+
+        if (box.width < 2) {
+            if (mode.indexOf("w") !== -1) box.x = splitDragState.origX + splitDragState.origW - 2;
+            box.width = 2;
+        }
+        if (box.height < 2) {
+            if (mode.indexOf("n") !== -1) box.y = splitDragState.origY + splitDragState.origH - 2;
+            box.height = 2;
+        }
+        clampSplitBox(box);
+        renderSplitPreview();
+        e.preventDefault();
+    });
+
+    document.addEventListener("mouseup", function() {
+        if (!splitDragState) return;
+        splitDragState = null;
+        splitState.components.sort(function(a, b) { return Math.abs(a.y - b.y) > 8 ? a.y - b.y : a.x - b.x; });
+        renderSplitList();
+    });
+
+    function openSplitEditor() {
+        if (!uiSplit.modal) return;
+        if (!splitPreviewImage) {
+            setStatus("请先点击“分析组件”生成候选框预览", "warning");
+            return;
+        }
+        if (uiSplit.modal.parentNode !== document.body) {
+            document.body.appendChild(uiSplit.modal);
+        }
+        uiSplit.modal.style.position = "fixed";
+        uiSplit.modal.style.left = "0px";
+        uiSplit.modal.style.top = "0px";
+        uiSplit.modal.style.right = "0px";
+        uiSplit.modal.style.bottom = "0px";
+        uiSplit.modal.style.width = "100vw";
+        uiSplit.modal.style.height = "100vh";
+        uiSplit.modal.style.zIndex = "2147483000";
+        uiSplit.modal.classList.add("active");
+        uiSplit.modal.style.display = "flex";
+        renderSplitPreview();
+        setTimeout(renderSplitPreview, 50);
+        logMsg("[Split] editor opened");
+    }
+
+    function closeSplitEditor() {
+        if (!uiSplit.modal) return;
+        uiSplit.modal.classList.remove("active");
+        uiSplit.modal.style.display = "none";
+    }
+
+    document.addEventListener("click", function(e) {
+        var target = e.target;
+        if (!target) return;
+        if (target.id === "btnOpenSplitEditor") {
+            e.preventDefault();
+            e.stopPropagation();
+            openSplitEditor();
+        } else if (target.id === "btnCloseSplitEditor") {
+            e.preventDefault();
+            e.stopPropagation();
+            closeSplitEditor();
+        } else if (target.id === "splitEditorModal") {
+            closeSplitEditor();
+        }
+    });
+
+    if (uiSplit.openEditor) {
+        uiSplit.openEditor.addEventListener("click", function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            openSplitEditor();
+        });
+    }
+
+    if (uiSplit.closeEditor) {
+        uiSplit.closeEditor.addEventListener("click", function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeSplitEditor();
+        });
+    }
+
+    if (uiSplit.deleteBoxes) {
+        uiSplit.deleteBoxes.addEventListener("click", function() {
+            splitState.components = splitState.components.filter(function(box) { return !box.selected; });
+            renderSplitList();
+        });
+    }
+
+    if (uiSplit.addBox) {
+        uiSplit.addBox.addEventListener("click", function() {
+            if (!splitPreviewImage) return;
+            var iw = splitState.previewWidth || splitPreviewImage.naturalWidth || splitPreviewImage.width || 1;
+            var ih = splitState.previewHeight || splitPreviewImage.naturalHeight || splitPreviewImage.height || 1;
+            var boxW = Math.max(32, Math.round(iw * 0.12));
+            var boxH = Math.max(32, Math.round(ih * 0.12));
+            clearSplitSelection();
+            splitState.components.push({
+                id: "box_" + (splitNextBoxId++),
+                x: Math.round((iw - boxW) / 2),
+                y: Math.round((ih - boxH) / 2),
+                width: boxW,
+                height: boxH,
+                area: boxW * boxH,
+                selected: true
+            });
+            renderSplitList();
+        });
+    }
+
+    if (uiSplit.mergeBoxes) {
+        uiSplit.mergeBoxes.addEventListener("click", function() {
+            var selected = getSelectedSplitBoxes();
+            if (selected.length < 2) return;
+            var x1 = Math.min.apply(null, selected.map(function(b) { return b.x; }));
+            var y1 = Math.min.apply(null, selected.map(function(b) { return b.y; }));
+            var x2 = Math.max.apply(null, selected.map(function(b) { return b.x + b.width; }));
+            var y2 = Math.max.apply(null, selected.map(function(b) { return b.y + b.height; }));
+            splitState.components = splitState.components.filter(function(box) { return !box.selected; });
+            splitState.components.push({ id: "box_" + (splitNextBoxId++), x: x1, y: y1, width: x2 - x1, height: y2 - y1, area: (x2 - x1) * (y2 - y1), selected: true });
+            splitState.components.sort(function(a, b) { return Math.abs(a.y - b.y) > 8 ? a.y - b.y : a.x - b.x; });
+            renderSplitList();
+        });
+    }
+
+    function splitSelectedBox(axis) {
+        var selected = getSelectedSplitBoxes();
+        if (selected.length !== 1) return;
+        var box = selected[0];
+        if ((axis === "x" && box.width < 4) || (axis === "y" && box.height < 4)) return;
+        splitState.components = splitState.components.filter(function(item) { return item !== box; });
+        if (axis === "x") {
+            var leftW = Math.floor(box.width / 2);
+            splitState.components.push({ id: "box_" + (splitNextBoxId++), x: box.x, y: box.y, width: leftW, height: box.height, area: leftW * box.height, selected: true });
+            splitState.components.push({ id: "box_" + (splitNextBoxId++), x: box.x + leftW, y: box.y, width: box.width - leftW, height: box.height, area: (box.width - leftW) * box.height, selected: true });
+        } else {
+            var topH = Math.floor(box.height / 2);
+            splitState.components.push({ id: "box_" + (splitNextBoxId++), x: box.x, y: box.y, width: box.width, height: topH, area: box.width * topH, selected: true });
+            splitState.components.push({ id: "box_" + (splitNextBoxId++), x: box.x, y: box.y + topH, width: box.width, height: box.height - topH, area: box.width * (box.height - topH), selected: true });
+        }
+        splitState.components.sort(function(a, b) { return Math.abs(a.y - b.y) > 8 ? a.y - b.y : a.x - b.x; });
+        renderSplitList();
+    }
+
+    if (uiSplit.splitVertical) {
+        uiSplit.splitVertical.addEventListener("click", function() { splitSelectedBox("x"); });
+    }
+    if (uiSplit.splitHorizontal) {
+        uiSplit.splitHorizontal.addEventListener("click", function() { splitSelectedBox("y"); });
+    }
+
+    if (uiSplit.analyze) {
+        uiSplit.analyze.addEventListener("click", function() {
+            if (uiSplit.analyze.disabled) return;
+            uiSplit.analyze.disabled = true;
+            if (uiSplit.apply) uiSplit.apply.disabled = true;
+            splitState.components = [];
+            setStatus("正在导出当前图层并分析透明区域...", "warning");
+
+            csInterface.evalScript("getActiveLayerPreview()", function(result) {
+                result = String(result || "").trim();
+                if (!result || result.indexOf("ERROR") === 0) {
+                    uiSplit.analyze.disabled = false;
+                    setStatus(result || "导出预览失败", "error");
+                    return;
+                }
+
+                var previewInfo;
+                try {
+                    previewInfo = JSON.parse(result);
+                } catch (e) {
+                    uiSplit.analyze.disabled = false;
+                    setStatus("解析预览信息失败", "error");
+                    return;
+                }
+
+                var img = new Image();
+                img.onload = function() {
+                    try {
+                        splitPreviewImage = img;
+                        splitState.sourceWidth = parseInt(previewInfo.width, 10) || img.naturalWidth;
+                        splitState.sourceHeight = parseInt(previewInfo.height, 10) || img.naturalHeight;
+                        splitState.sourceLayerId = parseInt(previewInfo.layerId, 10) || null;
+                        splitState.previewWidth = img.naturalWidth || img.width;
+                        splitState.previewHeight = img.naturalHeight || img.height;
+                        splitState.components = normalizeSplitBoxes(detectSplitComponents(img, {
+                            alphaThreshold: parseInt(uiSplit.alphaThreshold && uiSplit.alphaThreshold.value, 10) || 8,
+                            bgTolerance: parseInt(uiSplit.bgTolerance && uiSplit.bgTolerance.value, 10) || 34,
+                            minArea: parseInt(uiSplit.minArea && uiSplit.minArea.value, 10) || 64,
+                            mergeGap: parseInt(uiSplit.mergeGap && uiSplit.mergeGap.value, 10) || 0,
+                            padding: parseInt(uiSplit.padding && uiSplit.padding.value, 10) || 0
+                        }));
+                        renderSplitList();
+                        setStatus("拆图分析完成", "");
+                    } catch (err) {
+                        setStatus("拆图分析失败: " + err.message, "error");
+                        logMsg("[Split] analysis failed: " + err.message);
+                    }
+                    uiSplit.analyze.disabled = false;
+                };
+                img.onerror = function() {
+                    uiSplit.analyze.disabled = false;
+                    setStatus("加载预览图失败", "error");
+                };
+                img.src = "file:///" + String(previewInfo.path || "").replace(/\\/g, "/") + "?t=" + Date.now();
+            });
+        });
+    }
+
+    function runSplitIntoLayers(options, callback) {
+        options = options || {};
+        if (!splitState.components.length) return;
+        var applyInfo = buildSplitApplyInfo({ returnJson: !!options.returnJson });
+            var jsonStr = JSON.stringify(applyInfo).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+        if (uiSplit.apply) uiSplit.apply.disabled = true;
+        if (uiSplit.splitAndExport) uiSplit.splitAndExport.disabled = true;
+            setStatus("正在 Photoshop 中拆分图层...", "warning");
+            csInterface.evalScript("splitActiveLayerIntoComponents('" + jsonStr + "')", function(res) {
+                res = String(res || "").trim();
+            if (uiSplit.apply) uiSplit.apply.disabled = false;
+            if (uiSplit.splitAndExport) uiSplit.splitAndExport.disabled = false;
+                if (res.indexOf("ERROR") === 0) {
+                    setStatus(res, "error");
+                    logMsg("[Split] failed: " + res);
+                if (callback) callback(null, res);
+                    return;
+                }
+                setStatus(res || "拆图完成", "");
+                logMsg("[Split] " + res);
+                lastLayerNameForSync = "";
+            if (callback) callback(res, null);
+        });
+    }
+
+    if (uiSplit.apply) {
+        uiSplit.apply.addEventListener("click", function() {
+            if (uiSplit.apply.disabled) return;
+            runSplitIntoLayers();
+        });
+    }
+
+    function ensureSplitExportFolder(callback) {
+        if (!savedSplitExportPath) {
+            chooseSplitExportPath(function(ok) {
+                if (ok) callback();
+            });
+            return;
+        }
+
+        var confirmed = window.confirm("拆图将导出到：\n" + savedSplitExportPath + "\n\n点击“确定”继续导出，点击“取消”修改路径。");
+        if (confirmed) {
+            callback();
+            return;
+        }
+
+        chooseSplitExportPath(function(ok) {
+            if (ok) callback();
+        });
+    }
+
+    if (uiSplit.splitAndExport) {
+        uiSplit.splitAndExport.addEventListener("click", function() {
+            if (uiSplit.splitAndExport.disabled) return;
+            ensureSplitExportFolder(function() {
+
+            runSplitIntoLayers({ returnJson: true }, function(res, err) {
+                if (err || !res) return;
+                var splitResult;
+                try {
+                    splitResult = JSON.parse(res);
+                } catch (e) {
+                    setStatus("拆图完成，但解析新图层 ID 失败", "error");
+                    logMsg("[Split] parse split result failed: " + e.message + " | " + res);
+                    return;
+                }
+
+                var createdIds = splitResult.createdIds || [];
+                if (!createdIds.length) {
+                    setStatus("拆图完成，但没有可导出的图层", "warning");
+                    return;
+                }
+
+                var scanPayload = JSON.stringify({
+                    jsonFolder: savedSplitExportPath,
+                    imageFolder: savedSplitExportPath
+                }).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+
+                setStatus("拆图完成，正在准备直接导出...", "warning");
+                csInterface.evalScript("scanChanges('" + scanPayload + "')", function(scanRes) {
+                    scanRes = String(scanRes || "").trim();
+                    if (scanRes.indexOf("ERROR") === 0) {
+                        setStatus(scanRes, "error");
+                        return;
+                    }
+
+                    try {
+                        currentDiffData = JSON.parse(scanRes);
+                    } catch (e) {
+                        setStatus("拆图完成，但扫描导出数据失败", "error");
+                        return;
+                    }
+
+                    var exportPayload = JSON.stringify({
+                        jsonFolder: savedSplitExportPath,
+                        imageFolder: savedSplitExportPath,
+                        selectedIds: createdIds
+                    }).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+
+                    setStatus("正在导出拆分后的图层...", "warning");
+                    csInterface.evalScript("exportSelectedLayers('" + exportPayload + "')", function(exportRes) {
+                        exportRes = String(exportRes || "").trim();
+                        if (exportRes.indexOf("ERROR") === 0) {
+                            setStatus(exportRes, "error");
+                            logMsg("[Split Export] failed: " + exportRes);
+                            return;
+                        }
+                        setStatus("拆图并导出完成！路径: " + savedSplitExportPath, "");
+                        logMsg("[Split Export] " + exportRes);
+                        logMsg("[Split Export] saved to: " + savedSplitExportPath);
+                        if (typeof renderDiffList === "function" && currentDiffData) {
+                            renderDiffList(currentDiffData);
+                        }
+                    });
+                });
+            });
+            });
+        });
+    }
+
+    // ==========================================
     // 2. 九宫格编辑器逻辑
     // ==========================================
     var btnFetchSlice = document.getElementById("btnFetchSlice");
@@ -1828,6 +3072,7 @@ document.addEventListener("DOMContentLoaded", function() {
         savedImagePath = savedImagePath.replace(/\\/g, "/");
         txtImagePath.innerText = savedImagePath;
     }
+    updateSplitExportPathLabels();
 
     function checkFoldersAndAlert() {
         diffList.innerHTML = '<div style="text-align:center; padding:30px; color:#666; font-size:11px;">目录已更改，请重新扫描</div>';
@@ -1841,6 +3086,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 savedJsonPath = result.replace(/\\/g, "/");
                 localStorage.setItem("UILink_JsonPath", savedJsonPath);
                 txtJsonPath.innerText = savedJsonPath;
+                updateSplitExportPathLabels();
                 setStatus("已更新 JSON 存放目录！", "");
                 checkFoldersAndAlert();
             }
@@ -1854,6 +3100,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 savedImagePath = result.replace(/\\/g, "/");
                 localStorage.setItem("UILink_ImagePath", savedImagePath);
                 txtImagePath.innerText = savedImagePath;
+                updateSplitExportPathLabels();
                 setStatus("已更新图片存放目录！", "");
                 checkFoldersAndAlert();
             }
